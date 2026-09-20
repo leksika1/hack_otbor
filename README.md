@@ -207,6 +207,8 @@ broken lines inside a valid log are not an error — they are counted in
 
 `.env` is git-ignored; `.env.example` is not. No secrets live in the repository.
 
+A full example on a real 438-step session: [docs/example-report](docs/example-report/).
+
 ## Recommendations as files
 
 Every explanation carries the cause (`cause`) and where the fix belongs
