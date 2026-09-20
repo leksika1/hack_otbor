@@ -1,6 +1,18 @@
+import { useEffect, useRef } from 'react';
+
 import { ISSUE_LABELS, TONE_BADGE, formatNumber, formatTime, stepAction, stepLabel, stepTone } from '../../utils/format';
 
 export default function StepTrace({ steps, activeStep, onSelect }) {
+  const listRef = useRef(null);
+
+  // A step picked from a finding or from the session map is usually far outside
+  // the visible part of the list - bring it into view, or the click looks dead.
+  useEffect(() => {
+    if (activeStep == null) return;
+    const row = listRef.current?.querySelector(`[data-step="${activeStep.id}"]`);
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [activeStep]);
+
   return (
     <div className="border border-zinc-800 bg-zinc-900/30 rounded-xl overflow-hidden flex-1 shadow-sm">
       <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-900/80 flex items-center justify-between">
@@ -8,17 +20,18 @@ export default function StepTrace({ steps, activeStep, onSelect }) {
         <span className="text-xs text-zinc-500 font-mono">{steps.length}</span>
       </div>
 
-      <div className="p-3 space-y-1.5 max-h-[520px] overflow-y-auto">
+      <div ref={listRef} className="p-3 space-y-1.5 max-h-[520px] overflow-y-auto">
         {steps.map((step) => {
           const tone = stepTone(step);
           const isActive = activeStep?.id === step.id;
           return (
             <div
               key={step.id}
+              data-step={step.id}
               onClick={() => onSelect(step)}
               className={`p-4 rounded-lg text-sm flex items-start gap-4 cursor-pointer transition-all border ${
                 isActive
-                  ? 'bg-zinc-800 border-zinc-700 shadow-md'
+                  ? 'bg-zinc-800 border-emerald-600/70 shadow-md ring-1 ring-emerald-600/40'
                   : 'bg-transparent border-transparent hover:bg-zinc-800/40'
               }`}
             >

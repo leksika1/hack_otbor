@@ -198,11 +198,40 @@ def _steps_out(steps: list[Step], findings: list[Finding], limit: int) -> list[S
             actor=step.actor,
             tool_name=step.tool_name,
             status=step.status,
-            text=(step.text or "")[:300] or None,
+            text=(step.text or _call_summary(step))[:300] or None,
             tokens=step.tokens,
             cost=step.cost,
             details=step.raw_preview,
             issue_types=types_by_step.get(step.id, []),
         )
-        for step in steps[:limit]
+        for step in _steps_to_return(steps, types_by_step, limit)
     ]
+
+
+def _call_summary(step: Step) -> str:
+    """``Read(src/auth.js)`` instead of a bare ``Read()`` in the step trace."""
+    if not step.is_tool_call or not isinstance(step.tool_arguments, dict):
+        return ""
+    for name in ("command", "file_path", "path", "pattern", "query", "url", "description", "prompt", "skill"):
+        value = step.tool_arguments.get(name)
+        if isinstance(value, str) and value.strip():
+            return f"{step.tool_name}({' '.join(value.split())[:240]})"
+    return ""
+
+
+def _steps_to_return(steps: list[Step], flagged: dict[int, list[str]], limit: int) -> list[Step]:
+    """Which steps travel to the UI when the session is longer than ``limit``.
+
+    Every step a finding points at comes along with its neighbours - a finding
+    whose steps cannot be opened cannot be verified. The rest of the budget is an
+    even sample, so the session map still covers the whole session, not its start.
+    """
+    if len(steps) <= limit:
+        return steps
+    keep = {index for index, step in enumerate(steps) if step.id in flagged
+            for index in range(max(0, index - 2), min(len(steps), index + 3))}
+    spare = max(0, limit - len(keep))
+    if spare:
+        stride = max(1, len(steps) // spare)
+        keep.update(range(0, len(steps), stride))
+    return [steps[index] for index in sorted(keep)]

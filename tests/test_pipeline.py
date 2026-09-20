@@ -139,3 +139,16 @@ def test_sync_helper():
 def test_forced_format_is_respected():
     report = run(CLAUDE, log_format="generic")
     assert report.summary.log_format == "generic"
+
+
+def test_long_session_keeps_every_step_a_finding_points_at():
+    from backend.parser import Step
+    from backend.services.analysis_pipeline import _steps_out
+    from backend.analysis import Finding
+
+    steps = [Step(id=i, event_type="message", actor="agent") for i in range(1000)]
+    findings = [Finding(type="retry", severity="high", steps=(700, 950), message="retry")]
+    returned = {step.id for step in _steps_out(steps, findings, limit=100)}
+    assert {700, 950, 698, 952} <= returned           # flagged steps and their neighbours
+    assert min(returned) == 0 and max(returned) > 900  # still spans the whole session
+    assert len(returned) <= 110

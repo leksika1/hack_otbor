@@ -200,7 +200,7 @@ broken lines inside a valid log are not an error — they are counted in
 | `LLM_CONTEXT_RADIUS` | `2` | Steps included around each flagged step. |
 | `LLM_CONCURRENCY` | `4` | Parallel LLM requests. |
 | `MAX_UPLOAD_BYTES` | `52428800` | Upload limit for `POST /api/analyze`. |
-| `MAX_STEPS_IN_RESPONSE` | `500` | Steps returned to the UI. |
+| `MAX_STEPS_IN_RESPONSE` | `3000` | Steps returned to the UI. |
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Comma-separated allowed origins. |
 | `LOG_LEVEL` | `INFO` | Python logging level. |
 | `VITE_API_URL` (frontend) | `/api` | API base path baked into the bundle. |
@@ -230,6 +230,23 @@ Claude Code logs carry token usage but no prices, so cost is estimated from
 `message.model` at API list prices (cache writes 1.25x input, cache reads at
 their own rate) and flagged `summary.cost_estimated`. Token hotspots show the
 money spent in that stretch (`evidence.cost_usd`).
+
+### Key order
+
+Endpoints are tried strictly in order: every key in `LLM_API_KEY` (all of them use
+`LLM_BASE_URL` + `LLM_MODEL`), then each `LLM_FALLBACKS` entry. To make a paid key
+the primary one and keep the free keys as a safety net:
+
+```bash
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=sk-proj-...
+LLM_FALLBACKS=https://openrouter.ai/api/v1|nvidia/nemotron-3-super-120b-a12b:free|sk-or-v1-...;https://openrouter.ai/api/v1|nvidia/nemotron-3-super-120b-a12b:free|sk-or-v1-...
+```
+
+Claude and other vendors work the same way through OpenRouter
+(`LLM_MODEL=anthropic/claude-sonnet-5`, paid). `GET /health` shows the chain and
+which keys are currently benched.
 
 ## LLM providers: real vs mock
 

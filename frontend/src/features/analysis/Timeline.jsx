@@ -34,7 +34,7 @@ export default function Timeline({ steps, onSelect, truncated }) {
 
       <div className="flex justify-between mt-3 text-[10px] text-zinc-500 font-mono uppercase font-bold tracking-widest">
         <span>Старт</span>
-        <span>{truncated ? 'показаны первые шаги' : 'Конец сессии'}</span>
+        <span>{truncated ? 'конец сессии · показана выборка шагов' : 'Конец сессии'}</span>
       </div>
     </div>
   );

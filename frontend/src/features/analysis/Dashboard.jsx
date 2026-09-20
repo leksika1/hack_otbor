@@ -85,12 +85,12 @@ export default function Dashboard({ report, onReset }) {
             <MetricsGrid summary={summary} findings={findings} />
             <Timeline steps={steps} onSelect={setActiveStep} truncated={report.steps_truncated} />
             <StepTrace steps={steps} activeStep={activeStep} onSelect={setActiveStep} />
+            <StepInspector step={activeStep} />
           </div>
 
           <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
             <FindingsPanel findings={findings} explanations={explanations} onSelectStep={selectById} />
             <AgentsMdPanel agentsMd={report.agents_md} artifacts={report.artifacts} />
-            <StepInspector step={activeStep} />
           </div>
         </div>
       </main>

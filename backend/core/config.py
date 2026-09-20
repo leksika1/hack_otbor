@@ -77,7 +77,7 @@ class Settings:
 
     # API
     max_upload_bytes: int = 50 * 1024 * 1024
-    max_steps_in_response: int = 500
+    max_steps_in_response: int = 3000
     cors_origins: tuple[str, ...] = field(default_factory=lambda: _DEFAULT_CORS)
 
     # (base_url, model, api_key) endpoints tried after every LLM_API_KEY failed.
@@ -108,7 +108,7 @@ def get_settings() -> Settings:
         llm_max_issues=_int("LLM_MAX_ISSUES", 5, 0),
         llm_context_radius=_int("LLM_CONTEXT_RADIUS", 2, 0),
         max_upload_bytes=_int("MAX_UPLOAD_BYTES", 50 * 1024 * 1024, 1024),
-        max_steps_in_response=_int("MAX_STEPS_IN_RESPONSE", 500, 1),
+        max_steps_in_response=_int("MAX_STEPS_IN_RESPONSE", 3000, 1),
         llm_fallbacks=_fallbacks(_str("LLM_FALLBACKS")),
         cors_origins=tuple(part.strip() for part in origins.split(",") if part.strip()) or _DEFAULT_CORS,
     )
