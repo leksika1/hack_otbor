@@ -112,6 +112,27 @@ class AgentLogParser:
         """Generic format stub. Implement a vendor adapter by overriding this method."""
         payload = self._map(event.get("payload")) or self._map(event.get("data")) or event
         warnings: list[str] = []
+        # Codex desktop rollout JSONL nests actual event semantics in payload.
+        # Keep this small adapter here: it is still safe for unfamiliar records.
+        if event.get("type") == "event_msg" and payload.get("type") == "item_completed":
+            item = self._map(payload.get("item")) or {}
+            item_type = str(item.get("type", "item_completed"))
+            actor = "user" if item_type.lower() in {"usermessage", "user_message"} else "agent"
+            return LogStep(index, item_type.lower(), self._time(event.get("timestamp"), warnings),
+                           text=self._content_text(item.get("content")), actor=actor, raw=dict(event), parse_warnings=tuple(warnings))
+        if event.get("type") == "response_item" and payload.get("type") in {"function_call", "custom_tool_call"}:
+            return LogStep(index, str(payload["type"]), self._time(event.get("timestamp"), warnings),
+                           tool_name=self._string(payload, "name"), tool_arguments=self._decode_arguments(payload.get("arguments", payload.get("input"))),
+                           status=self._tool_status(payload), actor="agent", raw=dict(event), parse_warnings=tuple(warnings))
+        if event.get("type") == "response_item" and payload.get("type") == "message":
+            role = str(payload.get("role", "unknown")).lower()
+            return LogStep(index, "message", self._time(event.get("timestamp"), warnings),
+                           text=self._content_text(payload.get("content")), actor="user" if role == "user" else "agent",
+                           raw=dict(event), parse_warnings=tuple(warnings))
+        if event.get("type") == "event_msg" and payload.get("type") == "task_complete":
+            error = self._map(payload.get("error"))
+            return LogStep(index, "task_complete", self._time(event.get("timestamp"), warnings),
+                           status="error" if error else "success", actor="agent", raw=dict(event), parse_warnings=tuple(warnings))
         typ = self._string(event, "type", "event_type", "kind", "role") or "unknown"
         tool = self._string(payload, "tool_name", "tool", "name", "command_name") or self._string(event, "tool_name", "tool")
         args = self._value(payload, "tool_input", "arguments", "input", "params", "parameters")
@@ -170,8 +191,14 @@ class AgentLogParser:
         failed: dict[tuple[str, str], LogStep] = {}; out: list[Finding] = []
         for step in steps:
             if step.status != "error" and not self._error(step.raw): continue
+            error = self._error(step.raw)
+            # A task/session failure is useful evidence, but not a tool retry.
+            # Never merge separate turns that happened to end with the same error.
+            if not step.tool_name:
+                out.append(Finding("session_error", "high", (step.index,), "Session/turn ended with an error.", {"error": error[:500]}))
+                continue
             key = ((step.tool_name or step.event_type).lower(), self._canon(step.tool_arguments)); prior = failed.get(key)
-            out.append(Finding("tool_retry" if prior else "tool_error", "high" if prior else "medium", (prior.index, step.index) if prior else (step.index,), f"{'Retry after failed' if prior else 'Failed'} tool/event '{step.tool_name or step.event_type}'.", {"error": self._error(step.raw)[:500]})); failed[key] = step
+            out.append(Finding("tool_retry" if prior else "tool_error", "high" if prior else "medium", (prior.index, step.index) if prior else (step.index,), f"{'Retry after failed' if prior else 'Failed'} tool/event '{step.tool_name or step.event_type}'.", {"error": error[:500]})); failed[key] = step
         return out
 
     def _reverts(self, steps: Sequence[LogStep]) -> list[Finding]:
@@ -212,7 +239,29 @@ class AgentLogParser:
             date = datetime.fromisoformat(str(value).replace("Z", "+00:00")); return date if date.tzinfo else date.replace(tzinfo=timezone.utc)
         except (TypeError, ValueError, OverflowError, OSError): warnings.append("Unparseable timestamp"); return None
     @staticmethod
-    def _error(event: Mapping[str, Any]) -> str: return next((str(event[k]) for k in ("error", "stderr", "exception", "failure_reason") if event.get(k)), "")
+    def _error(event: Mapping[str, Any]) -> str:
+        for scope in (event, AgentLogParser._map(event.get("payload")) or {}):
+            for key in ("error", "stderr", "exception", "failure_reason"):
+                if scope.get(key): return str(scope[key])
+        return ""
+    @staticmethod
+    def _decode_arguments(value: Any) -> Any:
+        if not isinstance(value, str): return value
+        try: return json.loads(value)
+        except json.JSONDecodeError: return value
+    @staticmethod
+    def _content_text(value: Any) -> Optional[str]:
+        if isinstance(value, str): return value
+        if isinstance(value, list):
+            return "\n".join(str(x.get("text", "")) for x in value if isinstance(x, Mapping)) or None
+        return None
+    @staticmethod
+    def _tool_status(payload: Mapping[str, Any]) -> str:
+        value = str(payload.get("status", "")).lower()
+        if value in {"error", "failed", "failure", "exception", "timeout"}: return "error"
+        if value in {"completed", "success", "ok"}: return "success"
+        if "cancel" in value: return "cancelled"
+        return "unknown"
     @staticmethod
     def _canon(value: Any) -> str:
         try: return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))[:20000]

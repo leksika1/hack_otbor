@@ -18,3 +18,14 @@ class AgentLogParserTest(unittest.TestCase):
         p = AgentLogParser(idle_seconds=30); p.parse_lines(map(json.dumps, rows)); m = p.analyze()
         self.assertTrue(m.loops and m.errors and m.human_interventions and m.idle_periods)
         self.assertGreaterEqual(p.get_llm_chunks(128)[0]["chunk_count"], 1)
+
+    def test_codex_rollout_nested_events(self):
+        rows = [
+            {"timestamp": "2026-01-01T00:00:00Z", "type": "event_msg", "payload": {"type": "item_completed", "item": {"type": "UserMessage", "content": [{"type": "text", "text": "help"}]}}},
+            {"timestamp": "2026-01-01T00:00:01Z", "type": "response_item", "payload": {"type": "custom_tool_call", "name": "exec", "input": "{\"cmd\":\"ls\"}", "status": "completed"}},
+            {"timestamp": "2026-01-01T00:00:02Z", "type": "event_msg", "payload": {"type": "task_complete", "error": {"message": "limit"}}},
+        ]
+        p = AgentLogParser(); steps = p.parse_lines(map(json.dumps, rows)); m = p.analyze()
+        self.assertEqual((steps[0].actor, steps[1].tool_name, steps[2].status), ("user", "exec", "error"))
+        self.assertEqual(len(m.human_interventions), 1)
+        self.assertEqual(len(m.errors), 1)
