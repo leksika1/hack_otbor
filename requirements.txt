@@ -1,0 +1,4 @@
+pydantic>=2.6
+openai>=1.40          # optional at runtime: imported lazily by the real provider
+python-dotenv>=1.0    # optional: loads .env for LLM_* variables
+pytest>=8.0
