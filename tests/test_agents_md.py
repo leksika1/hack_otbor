@@ -101,3 +101,13 @@ def test_end_to_end_pipeline_contract():
     md = generate_agents_md(explanations)
     assert len(explanations) == 4
     assert md.count("- ") >= 4
+
+
+def test_a_skill_draft_is_always_produced_for_a_procedural_problem():
+    from backend.llm.artifacts import build_artifacts
+    from backend.llm.schemas import IssueExplanation
+
+    item = IssueExplanation(issue_type="retry", severity="high", steps=[3, 5], title="Повторный запуск npm test",
+                            explanation="e", impact="i", recommendation="r", agent_rule="Сначала читай вывод.")
+    paths = [artifact.path for artifact in build_artifacts([item])]
+    assert any(path.startswith(".claude/skills/") and path.endswith("/SKILL.md") for path in paths)

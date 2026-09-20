@@ -24,6 +24,7 @@ _KIND_TITLES = {
     "hook": "Хуки",
     "settings": "Настройки",
 }
+_PROCEDURAL = ("retry", "tool_failure", "human_intervention", "repeated_tool_call", "reverted_edit")
 _TRANSLIT = dict(zip("абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
                      "a b v g d e e zh z i y k l m n o p r s t u f h c ch sh sch _ y _ e yu ya".split()))
 
@@ -47,7 +48,12 @@ def build_artifacts(explanations: Sequence[IssueExplanation], session_name: str 
                  description="Блок для вставки в конец CLAUDE.md: правило + из каких шагов оно выведено.",
                  content=_claude_md_block(ordered, session_name)),
     ]
-    artifacts.extend(_skill(item) for item in ordered if item.fix_kind == "skill")
+    skills = [item for item in ordered if item.fix_kind == "skill"]
+    if not skills:
+        # Models rarely pick "skill" on their own. The most significant procedural
+        # problem (how to run, retry, verify) is still worth a reusable draft.
+        skills = [item for item in ordered if item.issue_type in _PROCEDURAL][:1]
+    artifacts.extend(_skill(item) for item in skills)
     artifacts.append(Artifact(path="NEXT_SESSION.md",
                               description="Чек-лист перед следующей сессией: что поменять и где.",
                               content=_checklist(ordered)))
