@@ -22,11 +22,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-issues", type=int, default=None, help="issues sent to the LLM")
     parser.add_argument("--no-llm", action="store_true", help="deterministic findings only")
     parser.add_argument("--agents-md", type=Path, default=None, help="write the generated rules here")
+    parser.add_argument("--out-dir", type=Path, default=None,
+                        help="write every ready-to-use file (CLAUDE.md block, skills, checklist) here")
     parser.add_argument("--json", action="store_true", help="print the raw JSON report")
     parser.add_argument("--log-level", default="WARNING", help="logging level (default: WARNING)")
     args = parser.parse_args(argv)
 
-    setup_logging(args.log_level)
+    setup_logging(args.log_level, stream=sys.stderr)
     if not args.log.is_file():
         print(f"No such file: {args.log}", file=sys.stderr)
         return 2
@@ -46,6 +48,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.agents_md:
         args.agents_md.write_text(report.agents_md, encoding="utf-8")
         print(f"\nwritten: {args.agents_md}")
+    if args.out_dir:
+        for artifact in report.artifacts:
+            target = args.out_dir / artifact.path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(artifact.content, encoding="utf-8")
+            print(f"written: {target}")
     return 0
 
 
@@ -54,6 +62,8 @@ def _print_human(report) -> None:
     print(f"{summary.file_name or 'log'}  format={summary.log_format}  steps={summary.steps}  "
           f"tokens={summary.tokens}  findings={summary.issues_total}  "
           f"explained={summary.issues_explained}  provider={report.provider}")
+    if summary.cost:
+        print(f"cost=${summary.cost:.2f}{' (estimated from token usage)' if summary.cost_estimated else ''}")
     for warning in report.warnings[:10]:
         print(f"  ! {warning}")
 
@@ -65,11 +75,17 @@ def _print_human(report) -> None:
     for item in report.explanations:
         print(f"\n## {item.title} ({item.severity}, steps {item.steps})")
         print(item.explanation)
+        if item.cause:
+            print(f"Почему: {item.cause}")
         print(item.impact)
-        print(f"-> {item.recommendation}")
+        print(f"-> [{item.fix_kind}] {item.recommendation}")
 
     print("\n--- AGENTS.md ---")
     print(report.agents_md)
+    for artifact in report.artifacts:
+        if artifact.path != "AGENTS.md":
+            print(f"\n--- {artifact.path} ---")
+            print(artifact.content)
 
 
 if __name__ == "__main__":

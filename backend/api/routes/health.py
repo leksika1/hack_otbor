@@ -6,13 +6,16 @@ from fastapi import APIRouter, Depends
 
 from backend.api.schemas import HealthResponse
 from backend.core.config import Settings, get_settings
+from backend.llm.providers import get_default_provider
 
 router = APIRouter(tags=["health"])
 
 
 @router.get("/health", response_model=HealthResponse, summary="Service health")
 async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
+    provider = get_default_provider()
     return HealthResponse(
+        endpoints=provider.describe() if hasattr(provider, "describe") else [],
         status="ok",
         version=settings.version,
         llm_configured=settings.has_api_key,

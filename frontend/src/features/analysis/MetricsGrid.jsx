@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatNumber } from '../../utils/format';
 
 export default function MetricsGrid({ summary, findings }) {

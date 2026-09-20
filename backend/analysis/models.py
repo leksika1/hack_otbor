@@ -72,7 +72,7 @@ class AnalysisConfig:
 
     similarity_threshold: float = 0.88
     repeat_window: int = 8
-    idle_seconds: float = 60.0
+    idle_seconds: float = 120.0
     idle_high_multiplier: float = 5.0
     bucket_size: int = 50
     hotspot_ratio: float = 2.0

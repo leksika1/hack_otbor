@@ -12,7 +12,10 @@ Two implementations ship here:
 
 from __future__ import annotations
 
+import functools
 import json
+import logging
+import time
 import os
 import re
 from typing import Any, Protocol, runtime_checkable
@@ -30,6 +33,9 @@ __all__ = [
     "parse_llm_output",
     "get_default_provider",
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 class LLMProviderError(RuntimeError):
@@ -376,7 +382,9 @@ class OpenAICompatibleProvider:
                 raise LLMProviderError(
                     "the 'openai' package is required for OpenAICompatibleProvider"
                 ) from exc
-            kwargs: dict[str, Any] = {"api_key": self.api_key, "timeout": self.timeout}
+            # max_retries=0: the SDK would silently repeat a 429 twice, burning a
+            # daily quota; retrying and failover are decided by the layers above.
+            kwargs: dict[str, Any] = {"api_key": self.api_key, "timeout": self.timeout, "max_retries": 0}
             if self.base_url:
                 kwargs["base_url"] = self.base_url
             self._client = AsyncOpenAI(**kwargs)
@@ -385,6 +393,10 @@ class OpenAICompatibleProvider:
     async def generate_issue_explanation(self, issue: Issue) -> IssueExplanation:
         raw = await self._complete(build_user_prompt(issue))
         output = parse_llm_output(raw)
+        # The prompt asks for Russian; free models sometimes answer in English anyway.
+        # Treat that as a failed attempt so the retry / next endpoint gets a chance.
+        if not re.search(r"[а-яё]", output.explanation + output.recommendation, re.IGNORECASE):
+            raise LLMProviderError("LLM ignored the requested output language")
         # Deterministic fields are restored from the issue, never from the model.
         return IssueExplanation.from_issue(issue, output)
 
@@ -397,8 +409,12 @@ class OpenAICompatibleProvider:
             if self._supports_json_schema:
                 try:
                     return await self._call(messages, self._json_schema_format())
-                except Exception:
-                    # Endpoint does not implement json_schema - fall back once.
+                except Exception as exc:
+                    # Only "this endpoint cannot do json_schema" (a 4xx about the
+                    # request) justifies a second call; a rate limit or an outage
+                    # would fail the same way and just cost another request.
+                    if _status_of(exc) not in (400, 404, 415, 422):
+                        raise
                     self._supports_json_schema = False
             return await self._call(messages, {"type": "json_object"})
         except LLMProviderError:
@@ -413,7 +429,8 @@ class OpenAICompatibleProvider:
             temperature=self.temperature,
             response_format=response_format,
         )
-        content = response.choices[0].message.content
+        choices = getattr(response, "choices", None) or []
+        content = choices[0].message.content if choices else None
         if not content:
             raise LLMProviderError("LLM returned an empty message")
         return content
@@ -430,6 +447,79 @@ class OpenAICompatibleProvider:
         }
 
 
+def _status_of(error: BaseException | None) -> int | None:
+    """HTTP status behind an SDK or provider error, if there is one."""
+    while error is not None:
+        status = getattr(error, "status_code", None)
+        if isinstance(status, int):
+            return status
+        error = error.__cause__
+    return None
+
+
+class FailoverProvider:
+    """Several endpoints tried in order: spare keys first, then fallbacks.
+
+    An endpoint that answers 429/401/402/403 or cannot be reached is benched for
+    ``cooldown`` seconds and the next one takes over; the choice is sticky, so a
+    dead key is not re-tried on every request. Each endpoint keeps its own model,
+    which is why a local model can be the last resort.
+    """
+
+    name = "openai-compatible"
+    _BENCH_STATUSES = (401, 402, 403, 429)
+
+    def __init__(self, providers: list[OpenAICompatibleProvider], cooldown: float = 600.0) -> None:
+        if not providers:
+            raise LLMProviderError("FailoverProvider needs at least one endpoint")
+        self.providers = providers
+        self.cooldown = cooldown
+        self._benched_until: dict[int, float] = {}
+        self._current = 0
+        self.switches = 0
+        self.last_used: OpenAICompatibleProvider | None = None
+
+    @property
+    def model(self) -> str:
+        return (self.last_used or self.providers[self._current]).model
+
+    def describe(self) -> list[dict[str, Any]]:
+        """Endpoint status without secrets - for /health."""
+        now = time.monotonic()
+        return [
+            {"endpoint": item.base_url or "https://api.openai.com/v1", "model": item.model,
+             "key": f"...{(item.api_key or '')[-4:]}", "active": index == self._current,
+             "benched_seconds": max(0, round(self._benched_until.get(index, 0) - now))}
+            for index, item in enumerate(self.providers)
+        ]
+
+    async def generate_issue_explanation(self, issue: Issue) -> IssueExplanation:
+        last_error: Exception | None = None
+        count = len(self.providers)
+        for offset in range(count):
+            index = (self._current + offset) % count
+            if self._benched_until.get(index, 0) > time.monotonic():
+                continue
+            provider = self.providers[index]
+            try:
+                result = await provider.generate_issue_explanation(issue)
+            except Exception as exc:  # noqa: BLE001 - any endpoint failure moves us on
+                last_error = exc
+                status = _status_of(exc)
+                unreachable = status is None and "connect" in str(exc).lower()
+                if status in self._BENCH_STATUSES or (status or 0) >= 500 or unreachable:
+                    self._benched_until[index] = time.monotonic() + self.cooldown
+                logger.warning("LLM endpoint %s (%s) failed with %s - trying the next one: %s",
+                               index + 1, provider.model, status or type(exc).__name__, str(exc)[:160])
+                continue
+            if index != self._current:
+                self.switches += 1
+                self._current = index
+            self.last_used = provider
+            return result
+        raise LLMProviderError(f"all {count} LLM endpoints failed or are cooling down: {last_error}")
+
+
 # --------------------------------------------------------------------------- #
 # Factory
 # --------------------------------------------------------------------------- #
@@ -442,15 +532,25 @@ def get_default_provider() -> LLMProvider:
     """
     from backend.core.config import get_settings  # local import keeps the graph flat
 
-    settings = get_settings()
+    return _provider_for(get_settings())
+
+
+@functools.lru_cache(maxsize=4)
+def _provider_for(settings: Any) -> LLMProvider:
+    # Cached per settings so that benched keys stay benched across requests
+    # instead of being re-tried by every upload.
     if not settings.has_api_key:
         return MockLLMProvider()
     try:
-        return OpenAICompatibleProvider(
-            api_key=settings.llm_api_key,
-            base_url=settings.llm_base_url,
-            model=settings.llm_model,
-            timeout=settings.llm_timeout_seconds,
-        )
+        endpoints = [
+            OpenAICompatibleProvider(api_key=key, base_url=settings.llm_base_url,
+                                     model=settings.llm_model, timeout=settings.llm_timeout_seconds)
+            for key in settings.llm_api_keys
+        ] + [
+            OpenAICompatibleProvider(api_key=key, base_url=base_url, model=model,
+                                     timeout=settings.llm_timeout_seconds)
+            for base_url, model, key in settings.llm_fallbacks
+        ]
     except LLMProviderError:
         return MockLLMProvider()
+    return endpoints[0] if len(endpoints) == 1 else FailoverProvider(endpoints)

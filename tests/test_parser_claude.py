@@ -39,7 +39,7 @@ def test_usage_is_counted_as_a_delta_per_message_id():
     other = {"type": "assistant", "message": {"id": "m2", "content": [], "usage": {**usage, "output_tokens": 30}}}
     result = parse([first, first, grown, other])
     # 180 for m1, +10 when its output grows, 190 for m2 - duplicates add nothing.
-    assert sum(step.tokens for step in result.steps) == 380
+    assert sum(step.tokens for step in result.steps) == 280  # cache reads are not counted
 
 
 def test_usage_without_message_id_is_skipped_with_a_warning():
@@ -56,10 +56,22 @@ def test_tool_result_is_not_a_human_message():
     assert result.steps[0].status == "error"
 
 
-def test_meta_and_synthetic_turns_are_ignored():
+def test_meta_and_synthetic_turns_are_not_human_turns():
     result = parse([{"type": "user", "isMeta": True, "uuid": "x",
                      "message": {"role": "user", "content": "system reminder"}}])
-    assert result.steps == []
+    # Kept as a system event (it is a real point in time), never as a user message.
+    assert [(step.actor, step.event_type) for step in result.steps] == [("system", "system_event")]
+
+
+def test_queued_prompt_is_a_human_turn_and_notification_is_not():
+    result = parse([
+        {"type": "attachment", "attachment": {"type": "queued_command", "prompt": "use the other folder"}},
+        {"type": "attachment", "attachment": {"type": "queued_command", "prompt": "<task-notification>done</task-notification>"}},
+        {"type": "attachment", "attachment": {"type": "hook_success", "content": "ok"}},
+        {"type": "user", "uuid": "n", "message": {"content": "<task-notification>done</task-notification>"}},
+    ])
+    assert [(step.actor, step.event_type) for step in result.steps] == [
+        ("user", "user_message"), ("system", "task_notification")]
 
 
 def test_unknown_blocks_are_safe():
@@ -74,4 +86,15 @@ def test_fixture_is_detected_and_parsed():
     assert result.invalid_lines == 1
     tools = [step.tool_name for step in result.steps if step.event_type == "tool_call"]
     assert tools == ["Bash", "Bash", "Edit", "Bash"]
-    assert sum(step.tokens for step in result.steps) == 25035
+    assert sum(step.tokens for step in result.steps) == 24985
+
+
+def test_injected_user_records_are_not_human_turns():
+    lines = [
+        {"type": "user", "uuid": "u1", "message": {"content": "сделай кнопку"}},
+        {"type": "user", "uuid": "u2", "message": {"content": "<local-command-stdout>ok</local-command-stdout>"}},
+        {"type": "user", "uuid": "u3", "isSidechain": True, "message": {"content": "You are a subagent."}},
+        {"type": "user", "uuid": "u4", "isCompactSummary": True, "message": {"content": "This session is being continued"}},
+    ]
+    result = SessionParser("claude").parse_lines(json.dumps(line) for line in lines)
+    assert [step.text for step in result.steps if step.actor == "user"] == ["сделай кнопку"]

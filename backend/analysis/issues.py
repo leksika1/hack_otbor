@@ -55,10 +55,17 @@ def select_top_issues(issues: Sequence[Issue], limit: int) -> list[Issue]:
 
     representatives: dict[tuple[str, str], Issue] = {}
     counts: dict[tuple[str, str], int] = {}
+    siblings: dict[tuple[str, str], list[dict]] = {}
     for issue in issues:
         evidence = issue.evidence.as_dict()
         key = (issue.type, str(evidence.get("tool") or ""))
         counts[key] = counts.get(key, 0) + 1
+        # The model explains the group, so it should see every member - a rule drawn
+        # from one user correction out of six misses the pattern.
+        siblings.setdefault(key, []).append({
+            "steps": issue.steps,
+            **{name: str(evidence[name])[:240] for name in ("message", "error", "arguments") if evidence.get(name)},
+        })
         current = representatives.get(key)
         if current is None or severity_rank(issue.severity) < severity_rank(current.severity):
             representatives[key] = issue
@@ -68,6 +75,7 @@ def select_top_issues(issues: Sequence[Issue], limit: int) -> list[Issue]:
         if counts[key] > 1:
             evidence = issue.evidence.as_dict()
             evidence["occurrences"] = counts[key]
+            evidence["all_occurrences"] = siblings[key][:8]
             issue = issue.model_copy(update={"evidence": type(issue.evidence).model_validate(evidence)})
         selected.append(issue)
 

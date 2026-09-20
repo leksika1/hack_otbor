@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { analyzeSession } from './api/client';
 import Dashboard from './features/analysis/Dashboard';
 import UploadScreen from './features/analysis/UploadScreen';

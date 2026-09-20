@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from backend.llm import IssueExplanation
+from backend.llm.artifacts import Artifact
 
 __all__ = ["SummaryOut", "FindingOut", "StepOut", "SessionReport"]
 
@@ -21,6 +22,8 @@ class SummaryOut(BaseModel):
     steps: int = 0
     tokens: int = 0
     cost: float = 0.0
+    # True when cost was priced from token usage rather than read from the log.
+    cost_estimated: bool = False
     duration_seconds: float = 0.0
     tool_calls: int = 0
     tool_errors: int = 0
@@ -68,6 +71,10 @@ class SessionReport(BaseModel):
     steps: list[StepOut] = Field(default_factory=list)
     steps_truncated: bool = False
     agents_md: str = ""
+    # Ready-to-use files: CLAUDE.md block, skill drafts, next-session checklist.
+    artifacts: list[Artifact] = Field(default_factory=list)
     provider: str = "mock"
+    # Model that actually answered (after any key/endpoint failover).
+    llm_model: str = ""
     provider_is_mock: bool = True
     warnings: list[str] = Field(default_factory=list)
