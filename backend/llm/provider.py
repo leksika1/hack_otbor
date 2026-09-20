@@ -164,18 +164,19 @@ class MockLLMProvider:
         error_text = f" failing with {_shorten(error)}" if error else " failing"
         count = ev.get("count")
         count_text = f" {count} times" if count else ""
+        repeated = isinstance(count, int) and count > 1
         return LLMOutput(
-            title=f"Repeated {tool} failure",
+            title=f"Failed {tool} call",
             explanation=(
                 f"At {_format_steps(issue.steps)} the agent ran {tool}, "
-                f"{error_text.strip()}{count_text}, and re-ran the command without "
-                "a visible change to the environment or to the command itself."
+                f"{error_text.strip()}{count_text}."
+                + (" The same command was run again after the failure." if repeated else "")
                 + self._context_suffix(issue)
             ),
             impact=(
-                "Re-running a command that fails for an unresolved reason consumes "
-                "tool calls and tokens and produces the same error again instead of "
-                "moving the task forward."
+                "A failing command produces no progress, and running it again before "
+                "its cause is resolved spends further tool calls and tokens on the "
+                "same error."
             ),
             recommendation=(
                 f"Read the {tool} error output and fix its cause "
@@ -313,9 +314,9 @@ class MockLLMProvider:
 
     @staticmethod
     def _context_suffix(issue: Issue) -> str:
-        if not issue.context:
-            return ""
-        return f" Analyzer context: {_shorten(issue.context, 200)}"
+        """Short detector note. The raw log fragment is never echoed back."""
+        message = issue.evidence.as_dict().get("detector_message")
+        return f" Detector note: {_shorten(message, 160)}" if message else ""
 
     _BUILDERS = {
         "repeated_tool_call": _repeated_tool_call,
@@ -433,23 +434,20 @@ class OpenAICompatibleProvider:
 # Factory
 # --------------------------------------------------------------------------- #
 
-def _load_dotenv_once() -> None:
-    try:
-        from dotenv import load_dotenv  # optional dependency
-    except ImportError:
-        return
-    load_dotenv(override=False)
-
-
 def get_default_provider() -> LLMProvider:
     """Real provider when ``LLM_API_KEY`` is set, otherwise the mock one.
 
-    This is what makes the module usable with no external API at all.
+    This is what makes the module usable with no external API at all. The
+    caller can always tell which one it got through ``provider.name``.
     """
-    _load_dotenv_once()
-    if not os.getenv("LLM_API_KEY"):
+    from backend.config import get_settings  # local import keeps the import graph flat
+
+    settings = get_settings()
+    if not settings.has_api_key:
         return MockLLMProvider()
     try:
-        return OpenAICompatibleProvider()
+        return OpenAICompatibleProvider(
+            api_key=settings.api_key, base_url=settings.base_url, model=settings.model
+        )
     except LLMProviderError:
         return MockLLMProvider()

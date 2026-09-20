@@ -27,5 +27,6 @@ class AgentLogParserTest(unittest.TestCase):
         ]
         p = AgentLogParser(); steps = p.parse_lines(map(json.dumps, rows)); m = p.analyze()
         self.assertEqual((steps[0].actor, steps[1].tool_name, steps[2].status), ("user", "exec", "error"))
-        self.assertEqual(len(m.human_interventions), 1)
+        # The opening user request is the task, not an intervention (see _interventions).
+        self.assertEqual(len(m.human_interventions), 0)
         self.assertEqual(len(m.errors), 1)

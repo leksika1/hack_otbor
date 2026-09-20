@@ -1,0 +1,27 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+.coverage
+.env
+*.log
+*.zip
+Claude outputs/
+Dockerfile
+docker-compose.yml
+README.md
+node_modules
+**/node_modules
+frontend/dist
+frontend/.vite
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+tests/__pycache__

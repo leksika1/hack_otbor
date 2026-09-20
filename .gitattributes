@@ -1,0 +1,6 @@
+# The repository is committed with LF endings; without this every Windows
+# checkout shows all files as modified.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.zip binary

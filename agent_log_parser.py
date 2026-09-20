@@ -50,12 +50,13 @@ class SessionMetrics:
     human_interventions: list[Finding] = field(default_factory=list)
     reverted_edits: list[Finding] = field(default_factory=list)
     idle_periods: list[Finding] = field(default_factory=list)
+    token_hotspots: list[Finding] = field(default_factory=list)
     parse_warnings: list[str] = field(default_factory=list)
 
     @property
     def findings(self) -> list[Finding]:
         rank = {"high": 0, "medium": 1, "low": 2}
-        return sorted(self.loops + self.errors + self.human_interventions + self.reverted_edits + self.idle_periods,
+        return sorted(self.loops + self.errors + self.human_interventions + self.reverted_edits + self.idle_periods + self.token_hotspots,
                       key=lambda x: (rank.get(x.severity, 3), x.step_indices))
 
 
@@ -155,8 +156,9 @@ class AgentLogParser:
         m.parse_warnings = [w for x in source for w in x.parse_warnings]
         m.token_buckets = [{"step_range": (part[0].index, part[-1].index), "tokens": sum(x.tokens for x in part), "cost": sum(x.cost for x in part)} for part in (source[i:i+self.bucket_size] for i in range(0, len(source), self.bucket_size))]
         m.loops = self._loops(source); m.errors = self._errors(source)
-        m.human_interventions = [Finding("human_intervention", "medium", (x.index,), "Human input or control event detected.", {"event_type": x.event_type}) for x in source if x.actor == "user"]
+        m.human_interventions = self._interventions(source)
         m.reverted_edits = self._reverts(source); m.idle_periods = self._idle(source)
+        m.token_hotspots = self._token_hotspots(m.token_buckets)
         self.metrics = m
         return m
 
@@ -199,6 +201,34 @@ class AgentLogParser:
                 continue
             key = ((step.tool_name or step.event_type).lower(), self._canon(step.tool_arguments)); prior = failed.get(key)
             out.append(Finding("tool_retry" if prior else "tool_error", "high" if prior else "medium", (prior.index, step.index) if prior else (step.index,), f"{'Retry after failed' if prior else 'Failed'} tool/event '{step.tool_name or step.event_type}'.", {"error": error[:500]})); failed[key] = step
+        return out
+
+    def _interventions(self, steps: Sequence[LogStep]) -> list[Finding]:
+        """User turns that redirect a working agent. The opening request is the task, not an intervention."""
+        out: list[Finding] = []; agent_active = False
+        for step in steps:
+            if step.actor != "user":
+                agent_active = agent_active or step.actor == "agent"
+                continue
+            if not agent_active: continue
+            evidence: dict[str, Any] = {"event_type": step.event_type}
+            if step.text: evidence["message"] = step.text.strip()[:500]
+            out.append(Finding("human_intervention", "medium", (step.index,), "User interrupted the agent to correct or redirect it.", evidence))
+        return out
+
+    def _token_hotspots(self, buckets: Sequence[Mapping[str, Any]]) -> list[Finding]:
+        """Buckets far above the session average. Silently empty when the log carries no usage data."""
+        usable = list(buckets)
+        total = sum(self._int(b.get("tokens")) for b in usable)
+        if len(usable) < 2 or total <= 0: return []   # no usage data in the log: stay silent
+        average = total / len(usable)
+        out: list[Finding] = []
+        for bucket in usable:
+            tokens = self._int(bucket.get("tokens")); ratio = tokens / average
+            if ratio <= 2: continue
+            start, end = tuple(bucket.get("step_range") or (0, 0))
+            out.append(Finding("token_hotspot", "medium", (int(start), int(end)), f"Steps {start}-{end} used {tokens} tokens ({ratio:.1f}x the session average).",
+                               {"token_count": tokens, "average_bucket_tokens": round(average, 1), "ratio": round(ratio, 2)}))
         return out
 
     def _reverts(self, steps: Sequence[LogStep]) -> list[Finding]:

@@ -16,7 +16,7 @@ fragment.
 ```python
 from backend.llm import LLMService, generate_agents_md, save_agents_md
 
-issues = analyzer.analyze(steps)          # list[Issue] or list[dict]
+issues = findings_to_issues(metrics.findings, steps)   # see backend/analysis
 service = LLMService()                    # provider chosen from env vars
 explanations = await service.explain_issues(issues, sort_by_severity=True)
 agents_md = generate_agents_md(explanations)
@@ -30,10 +30,16 @@ keep its own model as long as the fields line up (`type`, `severity`, `steps`,
 ## Configuration
 
 ```
-LLM_API_KEY=    # if empty -> MockLLMProvider, everything works offline
-LLM_BASE_URL=   # optional, any OpenAI-compatible endpoint
-LLM_MODEL=      # optional, defaults to gpt-4o-mini
+LLM_API_KEY=            # if empty -> MockLLMProvider, everything works offline
+LLM_BASE_URL=           # optional, any OpenAI-compatible endpoint
+LLM_MODEL=              # optional, defaults to gpt-4o-mini
+LLM_FALLBACK_TO_MOCK=   # false by default: a failed LLM call is reported, not faked
+LLM_MAX_ISSUES=         # how many issues the pipeline explains per session
 ```
+
+`LLMService.provider_name` / `used_mock` tell the caller which provider
+actually produced the explanations (`mock`, `openai-compatible`, or
+`mock-fallback` when a real call failed and the fallback was enabled).
 
 ## Anti-hallucination
 

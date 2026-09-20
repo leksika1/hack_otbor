@@ -1,0 +1,17 @@
+{"timestamp": "2026-01-01T00:00:00Z", "type": "event_msg", "payload": {"type": "item_completed", "item": {"type": "UserMessage", "content": [{"type": "text", "text": "Add a /users endpoint to the backend"}]}}}
+{"timestamp": "2026-01-01T00:00:01Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "text", "text": "Looking for the backend package."}]}}
+{"timestamp": "2026-01-01T00:00:02Z", "type": "response_item", "payload": {"type": "function_call", "name": "shell", "call_id": "c0", "arguments": "{\"command\": [\"grep\", \"-r\", \"UserService\", \".\"]}"}}
+{"timestamp": "2026-01-01T00:00:03Z", "type": "response_item", "payload": {"type": "function_call_output", "call_id": "c0", "output": "{\"output\": \"src/users.py\\n\", \"metadata\": {\"exit_code\": 0, \"duration_seconds\": 0.4}}"}}
+{"timestamp": "2026-01-01T00:00:05Z", "type": "response_item", "payload": {"type": "function_call", "name": "shell", "call_id": "c1", "arguments": "{\"command\": [\"grep\", \"-r\", \"UserService\", \".\"]}"}}
+{"timestamp": "2026-01-01T00:00:06Z", "type": "response_item", "payload": {"type": "function_call_output", "call_id": "c1", "output": "{\"output\": \"src/users.py\\n\", \"metadata\": {\"exit_code\": 0, \"duration_seconds\": 0.4}}"}}
+{"timestamp": "broken", "type": 
+not json at all
+{"timestamp": "2026-01-01T00:00:09Z", "type": "response_item", "payload": {"type": "function_call", "name": "shell", "call_id": "c2", "arguments": "{\"command\": [\"grep\", \"-r\", \"UserService\", \".\"]}"}}
+{"timestamp": "2026-01-01T00:00:10Z", "type": "response_item", "payload": {"type": "function_call_output", "call_id": "c2", "output": "{\"output\": \"ModuleNotFoundError: No module named 'backend'\", \"metadata\": {\"exit_code\": 1, \"duration_seconds\": 0.4}}"}}
+{"timestamp": "2026-01-01T00:00:12Z", "type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": 400, "output_tokens": 60}}}}
+{"timestamp": "2026-01-01T00:00:13Z", "type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": 24000, "output_tokens": 532}}}}
+{"timestamp": "2026-01-01T00:00:14Z", "type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": 300, "output_tokens": 40}}}}
+{"timestamp": "2026-01-01T00:00:15Z", "type": "event_msg", "payload": {"type": "some_future_event", "detail": {"x": 1}}}
+{"timestamp": "2026-01-01T00:00:16Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "text", "text": "Still searching."}]}}
+{"timestamp": "2026-01-01T00:05:50Z", "type": "event_msg", "payload": {"type": "item_completed", "item": {"type": "UserMessage", "content": [{"type": "text", "text": "no, backend is in another directory"}]}}}
+{"timestamp": "2026-01-01T00:05:52Z", "type": "event_msg", "payload": {"type": "task_complete"}}
