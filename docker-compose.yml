@@ -1,24 +1,26 @@
 services:
   backend:
-    build: .
-    container_name: agent-log-analyzer
-    ports:
-      - "8000:8000"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agent-session-analyzer-backend
+    container_name: analyzer-backend
     env_file:
       - .env
-    command: uvicorn backend.api:app --host 0.0.0.0 --port 8000
-
-  # Optional: the React dashboard in frontend/ (dev server, no extra files added
-  # to that folder). Start it with:  docker compose --profile frontend up --build
-  frontend:
-    image: node:20-alpine
-    container_name: agent-log-dashboard
-    profiles: ["frontend"]
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
     ports:
-      - "5173:5173"
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+    image: agent-session-analyzer-frontend
+    container_name: analyzer-frontend
+    ports:
+      - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

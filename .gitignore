@@ -1,21 +1,19 @@
-# --- secrets -------------------------------------------------------------
+# --- secrets -----------------------------------------------------------------
 .env
 .env.*
 !.env.example
 
-# --- python --------------------------------------------------------------
+# --- python ------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
 build/
-dist/
 .venv/
 venv/
 env/
-.python-version
 
-# --- tests / tooling -----------------------------------------------------
+# --- tests / tooling ---------------------------------------------------------
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -23,25 +21,26 @@ env/
 coverage.xml
 htmlcov/
 
-# --- frontend ------------------------------------------------------------
+# --- frontend ----------------------------------------------------------------
 node_modules/
 frontend/node_modules/
 frontend/dist/
+dist/
+*.tsbuildinfo
 
-# --- IDE / OS ------------------------------------------------------------
+# --- IDE / OS ----------------------------------------------------------------
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
 
-# --- logs and local session data ----------------------------------------
+# --- local session logs and artifacts ---------------------------------------
 *.log
 *.zip
 /logs/
 /samples/
 *.rollout.jsonl
 session-*.jsonl
-Claude outputs/
 
 # Fixture logs used by the test-suite must stay in git.
 !tests/fixtures/*.jsonl

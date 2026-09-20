@@ -1,106 +1,162 @@
-# Coding-agent session analyzer
+# Agent Session Analyzer
 
-Upload a Codex / Claude Code session log (`.jsonl`) and get back what went
-wrong in that session: repeated tool calls, failures and retries, user
-corrections, idle gaps, token hotspots - each one tied to concrete step
-numbers, explained in plain language, with a ready-to-paste `AGENTS.md` rule.
+Post-mortem analysis of coding-agent sessions. Upload a Codex or Claude Code
+`.jsonl` log and get back what went wrong in that session — repeated tool
+calls, failures and retries, user corrections, idle gaps, token hotspots,
+reverted edits — each tied to concrete step numbers, explained in plain
+language, with a ready-to-paste `AGENTS.md` rule set for the next session.
+
+## What it does
+
+1. **Parses** the raw session log into normalized steps (Codex rollout, Claude
+   Code, or a tolerant generic fallback).
+2. **Analyzes** those steps with deterministic Python detectors. Every finding
+   points at real step ids.
+3. **Explains** the most significant findings with an LLM: what happened, why
+   it is inefficient, what to do next time, and one standalone agent rule.
+4. **Generates** an `AGENTS.md` file from the accumulated rules.
+
+## Architecture
 
 ```
 JSONL log
-   -> Parser            (agent_log_parser.py)      normalized steps
-   -> Deterministic analysis                        Finding[]
-   -> Adapter                                       Issue[]
-   -> Context builder                               Issue[] + small log window
-   -> LLM layer         (backend/llm)               Explanation[]
-   -> Report                                        summary + findings + AGENTS.md
+   ↓  backend/parser        format adapters → Step[]
+Normalized steps
+   ↓  backend/analysis      deterministic detectors → Finding[]
+Findings (ranked, deduplicated)
+   ↓  backend/analysis      top issues + local context window → Issue[]
+   ↓  backend/llm           provider → explanation + agent rule
+Report + AGENTS.md
 ```
 
-## Why the LLM does not read the whole log
+One orchestration point — `backend.services.analyze_session` — is used by the
+API, the CLI and the tests.
 
-The Python code finds the problems; the LLM only explains them.
+## Why deterministic analysis plus an LLM
 
-* **Deterministic metrics.** Repetition, failures, retries, idle time and token
-  usage are counted by code, so the same log always produces the same findings.
+**Python decides what happened; the LLM only explains why it is inefficient.**
+
+* **Traceable.** Findings are computed by code, so `type`, `severity` and
+  `steps` are facts. They are re-applied to the model's answer afterwards, so
+  the LLM cannot silently change them.
 * **Fewer hallucinations.** The model receives one already-detected issue with
-  its evidence, not a haystack to search - it cannot invent a problem that the
-  analyzer never saw.
-* **Lower token usage.** A 100 MB rollout never reaches the model. Only a few
-  steps around each finding do, and only for the top `LLM_MAX_ISSUES` issues.
-* **Traceability.** `issue_type`, `severity` and `steps` are taken from the
-  analyzer *after* the model answers, so every sentence in the report can be
-  traced back to specific steps in the log.
+  its evidence and a small window of surrounding steps — not a haystack to
+  search in.
+* **Lower token usage.** A 100 MB rollout never reaches the model: only a few
+  steps around each finding do, for at most `LLM_MAX_ISSUES` issues, with
+  near-duplicates collapsed into one request.
+* **Works without an API key.** With no key the service runs on a deterministic
+  mock provider, and the response always says which provider produced the text.
 
-## Setup
+## Features
 
-### Local
+* Codex rollout and Claude Code JSONL, with automatic format detection
+* Crash-free parsing: malformed, truncated and unknown records become warnings
+* Claude streaming de-duplication and cumulative-token accounting
+* Detectors: repeated tool calls, tool failures, retries, session errors,
+  human interventions, idle periods, reverted edits, token hotspots
+* LLM layer with provider abstraction, structured output validation, retry,
+  bounded concurrency, and an explicit mock/real distinction
+* `AGENTS.md` generation with de-duplicated, grouped rules
+* React dashboard: summary, session map, step trace, step inspector, findings
+  with explanations, and the generated rules
+* FastAPI service with OpenAPI docs, CLI, and Docker Compose deployment
 
-```bash
-python -m venv .venv
-. .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env          # works without an API key too
-uvicorn backend.api:app --reload
+## Project structure
+
+```
+backend/
+├── api/                    FastAPI layer
+│   ├── app.py              application factory, CORS, error handlers
+│   ├── routes/             health.py, analysis.py
+│   └── schemas.py          HTTP contract
+├── core/                   config.py (env), logging.py
+├── parser/                 raw JSONL → Step[]
+│   ├── models.py           Step, ParseResult, ParseWarning
+│   ├── parser.py           line reading, format detection, dispatch
+│   ├── codex.py            Codex rollout adapter
+│   ├── claude.py           Claude Code adapter
+│   └── generic.py          tolerant fallback adapter
+├── analysis/               Step[] → Finding[] → Issue[]
+│   ├── models.py           Finding, metrics, thresholds
+│   ├── service.py          runs every detector, ranks findings
+│   ├── repeated_calls.py failures.py interventions.py
+│   ├── idle.py reverts.py tokens.py
+│   ├── issues.py           Finding → Issue, top-issue selection
+│   └── context.py          local context window builder
+├── llm/                    Issue → explanation + agent rule
+│   ├── schemas.py prompts.py providers.py service.py agents_md.py
+├── services/               analysis_pipeline.py, report.py
+└── cli.py
+
+frontend/                   React + Vite dashboard (nginx image for production)
+tests/                      pytest suite and JSONL fixtures
+docs/architecture.md        deeper design notes
 ```
 
-### Docker
+## Quick start
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-Then open <http://localhost:8000/docs> (Swagger UI) or
-<http://localhost:8000/health>.
+* Dashboard: <http://localhost:3000>
+* API docs: <http://localhost:8000/docs>
+* Health: <http://localhost:8000/health>
 
-The React dashboard in `frontend/` is optional and runs as a second service:
+Then upload a `.jsonl` session log in the UI. Without `LLM_API_KEY` everything
+still works — explanations come from the mock provider and the UI labels them
+as such.
+
+## Local development
+
+Backend:
 
 ```bash
-docker compose --profile frontend up --build    # backend :8000 + dashboard :5173
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements-dev.txt
+uvicorn backend.api.app:app --reload
 ```
 
-Locally it is the usual `cd frontend && npm install && npm run dev`. It posts to
-`http://127.0.0.1:8000/api/analyze`, which is served by the same backend.
+Frontend:
 
-## Environment
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173, proxies /api to localhost:8000
+```
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `LLM_API_KEY` | *(empty)* | Key for an OpenAI-compatible API. Empty = offline mock provider. |
-| `LLM_BASE_URL` | *(empty)* | Optional custom endpoint (OpenRouter, vLLM, a local proxy). |
-| `LLM_MODEL` | `gpt-4o-mini` | Model name passed to the provider. |
-| `LLM_FALLBACK_TO_MOCK` | `false` | `true` replaces failed LLM calls with mock text (development only). |
-| `LLM_MAX_ISSUES` | `5` | How many of the most significant issues are explained by the LLM. |
-| `LLM_CONTEXT_RADIUS` | `2` | Steps included around each flagged step. |
-| `LLM_CONCURRENCY` | `4` | Parallel LLM requests. |
-| `MAX_UPLOAD_BYTES` | `26214400` | Upload size limit for `POST /analyze`. |
+CLI (no server needed):
 
-Never commit a real key: `.env` is git-ignored, `.env.example` is not.
+```bash
+python -m backend.cli tests/fixtures/codex_session.jsonl
+python -m backend.cli session.jsonl --json --agents-md AGENTS.md
+```
 
 ## API
 
-### `GET /health`
-
-```json
-{"status": "ok", "llm_configured": false, "provider": "mock",
- "model": "gpt-4o-mini", "fallback_to_mock": false}
-```
-
-### `POST /analyze`
-
-Multipart upload of a `.jsonl` log.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/health`, `/api/health` | liveness and which provider is configured |
+| `POST` | `/api/analyze` (alias `/analyze`) | upload a `.jsonl` log, get the report |
+| `POST` | `/api/agents-md` | render `AGENTS.md` from explanations |
 
 ```bash
-curl -X POST http://localhost:8000/analyze \
-  -F "file=@rollout.jsonl"
-
-# deterministic report only, no LLM calls
-curl -X POST "http://localhost:8000/analyze?explain=false" -F "file=@rollout.jsonl"
+curl -X POST http://localhost:8000/api/analyze -F "file=@rollout.jsonl"
+curl -X POST "http://localhost:8000/api/analyze?explain=false" -F "file=@rollout.jsonl"
 ```
+
+Query parameters: `log_format` (`auto`, `codex`, `claude`, `generic`),
+`max_issues`, `explain`.
 
 ```json
 {
-  "summary": {"steps": 842, "tokens": 135000, "issues_total": 12,
-              "issues_explained": 5, "parse_warnings": 2, "invalid_lines": 2},
+  "summary": {"file_name": "rollout.jsonl", "log_format": "codex", "steps": 842,
+              "tokens": 135000, "cost": 0.0, "duration_seconds": 1830.0,
+              "tool_calls": 210, "tool_errors": 12, "user_messages": 6,
+              "issues_total": 12, "issues_explained": 5,
+              "invalid_lines": 0, "ignored_lines": 31, "parse_warnings": 0},
   "findings": [
     {"type": "repeated_tool_call", "severity": "high", "steps": [42, 48],
      "message": "Tool 'shell' repeated with identical arguments.",
@@ -111,6 +167,13 @@ curl -X POST "http://localhost:8000/analyze?explain=false" -F "file=@rollout.jso
      "title": "...", "explanation": "...", "impact": "...",
      "recommendation": "...", "agent_rule": "..."}
   ],
+  "steps": [
+    {"id": 42, "line": 51, "timestamp": "2026-01-01T00:00:09+00:00",
+     "event_type": "tool_call", "actor": "agent", "tool_name": "shell",
+     "status": "unknown", "text": null, "tokens": 0, "cost": 0.0,
+     "details": "{...}", "issue_types": ["repeated_tool_call"]}
+  ],
+  "steps_truncated": false,
   "agents_md": "# Agent Rules\n\n## Repository exploration\n\n- ...",
   "provider": "openai-compatible",
   "provider_is_mock": false,
@@ -118,98 +181,75 @@ curl -X POST "http://localhost:8000/analyze?explain=false" -F "file=@rollout.jso
 }
 ```
 
-Errors: `400` empty upload, `413` too large, `422` no valid JSON lines,
-`500` unexpected failure. A few broken lines inside a valid log are *not* an
-error - they are counted in `summary.invalid_lines` and reported in `warnings`.
+Errors: `400` empty or unreadable upload, `413` too large, `422` no readable
+session steps, `500` unexpected failure (no stack traces are returned). A few
+broken lines inside a valid log are not an error — they are counted in
+`summary.invalid_lines` and listed in `warnings`.
 
-### `POST /api/analyze`
+## Configuration
 
-Same analysis as `/analyze`, plus the camelCase aliases the React dashboard
-reads (`summary.fileName`, `summary.duration`, `summary.totalTokens`,
-`summary.totalCost`, `metrics[]`, `logSteps[]`, `artifactText`). It exists so
-that the frontend and the canonical API can evolve independently.
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `LLM_API_KEY` | *(empty)* | Key for an OpenAI-compatible API. Empty = mock provider. |
+| `LLM_BASE_URL` | *(empty)* | Custom endpoint (OpenRouter, vLLM, a local proxy). |
+| `LLM_MODEL` | `gpt-4o-mini` | Model name passed to the provider. |
+| `LLM_TIMEOUT_SECONDS` | `60` | Per-request timeout. |
+| `LLM_FALLBACK_TO_MOCK` | `false` | `true` replaces failed LLM calls with mock text (dev only). |
+| `LLM_MAX_ISSUES` | `5` | How many issues are explained per session. |
+| `LLM_CONTEXT_RADIUS` | `2` | Steps included around each flagged step. |
+| `LLM_CONCURRENCY` | `4` | Parallel LLM requests. |
+| `MAX_UPLOAD_BYTES` | `10485760` | Upload limit for `POST /api/analyze`. |
+| `MAX_STEPS_IN_RESPONSE` | `500` | Steps returned to the UI. |
+| `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Comma-separated allowed origins. |
+| `LOG_LEVEL` | `INFO` | Python logging level. |
+| `VITE_API_URL` (frontend) | `/api` | API base path baked into the bundle. |
 
-### `POST /generate-agents-md`
-
-```bash
-curl -X POST http://localhost:8000/generate-agents-md \
-  -H 'Content-Type: application/json' \
-  -d '{"explanations": [ ... ]}'
-```
-
-### CLI
-
-```bash
-python -m backend.cli path/to/rollout.jsonl
-python -m backend.cli path/to/rollout.jsonl --json --agents-md AGENTS.md
-```
-
-## Tests
-
-```bash
-pytest
-```
-
-No API key required: the suite runs entirely on `MockLLMProvider`.
-
-## Project structure
-
-```
-agent_log_parser.py          parser + deterministic analyzers (shared module, root by design)
-
-backend/
-    api.py                   FastAPI app: /health, /analyze, /api/analyze, /generate-agents-md
-    pipeline.py              orchestration: JSONL -> findings -> issues -> LLM -> report
-    dashboard.py             view-model for the React frontend (no frontend code changes)
-    cli.py                   python -m backend.cli <log.jsonl>
-    config.py                environment configuration
-    parser/
-        __init__.py          facade over the root-level parser module
-        adapter.py           SessionParser: Codex tool-output and token-count events
-    analysis/
-        adapters.py          Finding -> Issue mapping (FINDING_TYPE_MAP)
-        context.py           build_issue_context / enrich_issues_with_context
-    llm/
-        schemas.py           Issue / IssueExplanation contracts
-        prompts.py           system prompt + JSON schema
-        provider.py          LLMProvider protocol, MockLLMProvider, OpenAI-compatible
-        service.py           LLMService.explain_issue / explain_issues
-        agents_md.py         AGENTS.md generation
-        examples.py demo.py  offline demo data and runner
-
-frontend/                    React + Vite dashboard (developed separately, untouched here)
-
-tests/                       pytest suite (parser, adapters, context, pipeline, dashboard, API, LLM)
-    test_agent_log_parser.py the parser's own unittest suite
-tests/fixtures/              small Codex-shaped sample log
-```
-
-`agent_log_parser.py` intentionally stays at the repository root: it is
-developed in parallel, and `backend/parser/` is only a thin facade over it.
+`.env` is git-ignored; `.env.example` is not. No secrets live in the repository.
 
 ## LLM providers: real vs mock
 
 | | `MockLLMProvider` | `OpenAICompatibleProvider` |
 | --- | --- | --- |
 | Needs `LLM_API_KEY` | no | yes |
-| Output | deterministic templates built from the evidence | model-generated |
-| Used when | no key configured, tests, frontend work, demos | `LLM_API_KEY` is set |
+| Output | deterministic text built from the evidence | model-generated |
+| Used when | no key configured, tests, UI work, demos | `LLM_API_KEY` is set |
 
-Every response carries `provider` and `provider_is_mock`, so mock output is
-never presented as a real answer. If a real call fails and
-`LLM_FALLBACK_TO_MOCK=false` (the default), the deterministic findings are
-still returned, `explanations` stays empty and the reason appears in
-`warnings`. With `LLM_FALLBACK_TO_MOCK=true` the mock fills in and `provider`
-becomes `mock-fallback`.
+Every response carries `provider` and `provider_is_mock`, and the dashboard
+shows a badge, so mock output is never presented as a real answer. If a real
+call fails and `LLM_FALLBACK_TO_MOCK=false` (the default), the deterministic
+findings are still returned, `explanations` stays empty and the reason appears
+in `warnings`. With the fallback enabled, `provider` becomes `mock-fallback`.
+
+## Testing
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+No API key is required: the suite runs entirely on the mock provider.
+
+## Supported logs
+
+* **Codex desktop rollout JSONL** — best supported. Tool calls, tool outputs
+  (exit codes), user messages, per-turn and cumulative token counters, task
+  completion errors.
+* **Claude Code JSONL** — supported, including streaming duplicates,
+  `tool_use` / `tool_result` blocks and cumulative `message.usage` accounting.
+* **Anything else** — a generic adapter recognises common field names
+  (`type`, `tool_name`, `arguments`, `status`, `usage`, …). Unknown records are
+  preserved as steps rather than dropped.
 
 ## Limitations
 
-* Best supported format: Codex desktop rollout JSONL (`event_msg` /
-  `response_item` records). Other logs go through a generic, schema-tolerant
-  adapter - fields it cannot recognise are preserved but not interpreted.
-* Repetition detection is a text-similarity heuristic (`SequenceMatcher`), and
-  token hotspots are "bucket above 2x the session average". Both are
-  approximations, deliberately simple and explainable.
-* Token metrics only exist if the log carries usage data; otherwise token
-  hotspots are silently skipped.
-* No database, no auth, no persistence - each request is analyzed in memory.
+* Detectors are simple, explainable heuristics: text similarity for repeats,
+  "above 2x the session average" for token hotspots, a fixed threshold for idle
+  gaps. They flag candidates, not proven waste.
+* Token metrics only exist when the log carries usage data; otherwise token
+  hotspots are skipped rather than guessed.
+* Cost is reported only when the log itself contains cost fields — the service
+  does not price tokens by model.
+* Reverted edits are detected from tool names and shell commands, not from file
+  snapshots.
+* No database and no auth: each upload is analyzed in memory and nothing is
+  stored.

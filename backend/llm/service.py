@@ -14,9 +14,9 @@ import asyncio
 import logging
 from typing import Any, Iterable, Sequence
 
-from backend.config import get_settings
+from backend.core.config import get_settings
 
-from .provider import LLMProvider, MockLLMProvider, get_default_provider
+from .providers import LLMProvider, MockLLMProvider, get_default_provider
 from .schemas import Issue, IssueExplanation
 
 __all__ = ["LLMService"]
@@ -57,10 +57,10 @@ class LLMService:
     ) -> None:
         settings = get_settings()
         self.provider: LLMProvider = provider or get_default_provider()
-        self.concurrency = max(1, int(concurrency if concurrency is not None else settings.concurrency))
+        self.concurrency = max(1, int(concurrency if concurrency is not None else settings.llm_concurrency))
         self.retries = max(0, int(retries))
         self.fallback_to_mock = (
-            settings.fallback_to_mock if fallback_to_mock is None else bool(fallback_to_mock)
+            settings.llm_fallback_to_mock if fallback_to_mock is None else bool(fallback_to_mock)
         )
         self._mock = MockLLMProvider()
         # Reported by the API so a mock answer is never shown as a real one.

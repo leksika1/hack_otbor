@@ -20,7 +20,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 __all__ = [
     "SEVERITY_ORDER",
-    "KNOWN_ISSUE_TYPES",
     "IssueEvidence",
     "Issue",
     "LLMOutput",
@@ -36,17 +35,6 @@ SEVERITY_ORDER: dict[str, int] = {
     "low": 3,
     "info": 4,
 }
-
-# Informational only - NOT an enum. Analyzers may add new types at any time.
-KNOWN_ISSUE_TYPES: tuple[str, ...] = (
-    "repeated_tool_call",
-    "tool_failure",
-    "retry",
-    "token_hotspot",
-    "human_intervention",
-    "idle_period",
-)
-
 
 def severity_rank(severity: str | None) -> int:
     """Sort key for a severity string. Unknown values sort after known ones."""

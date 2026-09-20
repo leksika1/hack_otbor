@@ -11,7 +11,7 @@ Public API::
 
 from .agents_md import generate_agents_md, save_agents_md
 from .prompts import SYSTEM_PROMPT, build_user_prompt
-from .provider import (
+from .providers import (
     LLMProvider,
     LLMProviderError,
     MockLLMProvider,
@@ -20,7 +20,6 @@ from .provider import (
     parse_llm_output,
 )
 from .schemas import (
-    KNOWN_ISSUE_TYPES,
     SEVERITY_ORDER,
     Issue,
     IssueEvidence,
@@ -34,7 +33,6 @@ __all__ = [
     "IssueEvidence",
     "IssueExplanation",
     "LLMOutput",
-    "KNOWN_ISSUE_TYPES",
     "SEVERITY_ORDER",
     "LLMProvider",
     "LLMProviderError",

@@ -19,8 +19,10 @@ SECTION_BY_ISSUE_TYPE: dict[str, str] = {
     "tool_failure": "Tool usage",
     "retry": "Tool usage",
     "token_hotspot": "Context and token usage",
+    "session_error": "Tool usage",
     "human_intervention": "Working with the user",
     "idle_period": "Progress and pacing",
+    "reverted_edit": "Editing code",
 }
 FALLBACK_SECTION = "General"
 
@@ -28,6 +30,7 @@ FALLBACK_SECTION = "General"
 _SECTION_ORDER = [
     "Repository exploration",
     "Tool usage",
+    "Editing code",
     "Context and token usage",
     "Working with the user",
     "Progress and pacing",

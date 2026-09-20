@@ -23,6 +23,10 @@ def _get(step: Any, name: str, default: Any = None) -> Any:
     return getattr(step, name, default)
 
 
+def _step_id(step: Any) -> Any:
+    return _get(step, "id", _get(step, "index"))
+
+
 def _label(step: Any) -> str:
     event_type = str(_get(step, "event_type", "") or "")
     tool = _get(step, "tool_name")
@@ -88,7 +92,7 @@ def build_issue_context(
     """
     by_index: dict[int, Any] = {}
     for step in steps or []:
-        index = _get(step, "index")
+        index = _step_id(step)
         if isinstance(index, int):
             by_index[index] = step
     if not by_index or not issue.steps:

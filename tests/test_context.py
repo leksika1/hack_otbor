@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from backend.analysis import build_issue_context, enrich_issues_with_context
 from backend.llm.schemas import Issue
-from backend.parser import LogStep
+from backend.parser import Step
 
 
-def steps(count: int = 10) -> list[LogStep]:
+def steps(count: int = 10) -> list[Step]:
     return [
-        LogStep(index=i, event_type="message", text=f"line {i}", actor="agent")
+        Step(id=i, event_type="message", text=f"line {i}", actor="agent")
         for i in range(count)
     ]
 
@@ -56,15 +56,15 @@ def test_no_steps_returns_empty_string():
 
 
 def test_context_is_truncated():
-    long_steps = [LogStep(index=i, event_type="message", text="x" * 2000, actor="agent") for i in range(5)]
+    long_steps = [Step(id=i, event_type="message", text="x" * 2000, actor="agent") for i in range(5)]
     context = build_issue_context(Issue(type="x", steps=[2]), long_steps, radius=2, max_chars=500)
     assert len(context) <= 500
 
 
 def test_tool_calls_are_labelled():
     tool_steps = [
-        LogStep(index=0, event_type="function_call", tool_name="grep", tool_arguments={"q": "UserService"}, actor="agent"),
-        LogStep(index=1, event_type="function_call_output", tool_name="grep", status="error", text="boom", actor="agent"),
+        Step(id=0, event_type="function_call", tool_name="grep", tool_arguments={"q": "UserService"}, actor="agent"),
+        Step(id=1, event_type="function_call_output", tool_name="grep", status="error", text="boom", actor="agent"),
     ]
     context = build_issue_context(Issue(type="x", steps=[0]), tool_steps, radius=1)
     assert "[tool_call: grep]" in context

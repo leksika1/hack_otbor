@@ -1,0 +1,14 @@
+{"type": "user", "uuid": "u1", "timestamp": "2026-02-02T09:00:00Z", "message": {"role": "user", "content": "Запусти тесты и почини падающий"}}
+{"type": "assistant", "timestamp": "2026-02-02T09:00:03Z", "message": {"id": "m1", "content": [{"type": "text", "text": "Сначала запущу тесты."}, {"type": "tool_use", "id": "a", "name": "Bash", "input": {"command": "npm test"}}], "usage": {"input_tokens": 100, "output_tokens": 20, "cache_read_input_tokens": 50}}}
+{"type": "assistant", "timestamp": "2026-02-02T09:00:04Z", "message": {"id": "m1", "content": [{"type": "text", "text": "Сначала запущу тесты."}, {"type": "tool_use", "id": "a", "name": "Bash", "input": {"command": "npm test"}}], "usage": {"input_tokens": 100, "output_tokens": 20, "cache_read_input_tokens": 50}}}
+{"type": "user", "timestamp": "2026-02-02T09:00:20Z", "message": {"content": [{"type": "tool_result", "tool_use_id": "a", "is_error": true, "content": "1 failing: auth.test.js"}]}}
+{"type": "assistant", "timestamp": "2026-02-02T09:00:24Z", "message": {"id": "m2", "content": [{"type": "tool_use", "id": "b", "name": "Bash", "input": {"command": "npm test"}}], "usage": {"input_tokens": 120, "output_tokens": 30}}}
+{"type":"assistant","message":
+{"type": "user", "timestamp": "2026-02-02T09:00:41Z", "message": {"content": [{"type": "tool_result", "tool_use_id": "b", "is_error": true, "content": "1 failing: auth.test.js"}]}}
+{"type": "assistant", "timestamp": "2026-02-02T09:00:50Z", "message": {"id": "m3", "content": [{"type": "tool_use", "id": "c", "name": "Edit", "input": {"file_path": "src/auth.js", "old_string": "a", "new_string": "b"}}], "usage": {"input_tokens": 24000, "output_tokens": 300}}}
+{"type": "user", "timestamp": "2026-02-02T09:00:53Z", "message": {"content": [{"type": "tool_result", "tool_use_id": "c", "content": "Edited src/auth.js"}]}}
+{"type": "assistant", "timestamp": "2026-02-02T09:00:58Z", "message": {"id": "m4", "content": [{"type": "tool_use", "id": "d", "name": "Bash", "input": {"command": "git checkout -- src/auth.js"}}], "usage": {"input_tokens": 200, "output_tokens": 25}}}
+{"type": "user", "timestamp": "2026-02-02T09:01:01Z", "message": {"content": [{"type": "tool_result", "tool_use_id": "d", "content": ""}]}}
+{"type": "user", "uuid": "u-meta", "timestamp": "2026-02-02T09:01:02Z", "isMeta": true, "message": {"role": "user", "content": "<system-reminder>ignore me</system-reminder>"}}
+{"type": "user", "uuid": "u2", "timestamp": "2026-02-02T09:06:40Z", "message": {"role": "user", "content": "нет, тест падает из-за конфига, а не из-за auth.js"}}
+{"type": "assistant", "timestamp": "2026-02-02T09:06:45Z", "message": {"id": "m5", "content": [{"type": "text", "text": "Понял, смотрю конфиг."}], "usage": {"input_tokens": 150, "output_tokens": 40}}}
