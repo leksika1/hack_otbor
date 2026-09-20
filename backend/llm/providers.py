@@ -394,9 +394,9 @@ class OpenAICompatibleProvider:
         raw = await self._complete(build_user_prompt(issue))
         output = parse_llm_output(raw)
         # The prompt asks for Russian; free models sometimes answer in English anyway.
-        # Treat that as a failed attempt so the retry / next endpoint gets a chance.
         if not re.search(r"[а-яё]", output.explanation + output.recommendation, re.IGNORECASE):
-            raise LLMProviderError("LLM ignored the requested output language")
+            # Rejecting it would burn a request per endpoint for the same result.
+            logger.warning("LLM answered in another language for issue %s; keeping the answer", issue.type)
         # Deterministic fields are restored from the issue, never from the model.
         return IssueExplanation.from_issue(issue, output)
 

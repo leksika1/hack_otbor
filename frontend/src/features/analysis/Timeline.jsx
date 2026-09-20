@@ -1,7 +1,9 @@
 import { TONE_BAR, stepAction, stepTone } from '../../utils/format';
 
 export default function Timeline({ steps, onSelect, truncated }) {
-  const width = `${100 / Math.max(steps.length, 1)}%`;
+  // Gaps between hundreds of bars add up to more than the container and squeeze
+  // every bar to zero width, so a long session is drawn without them.
+  const dense = steps.length > 120;
 
   return (
     <div className="p-6 border border-zinc-800 bg-zinc-900/30 rounded-xl shadow-sm">
@@ -17,15 +19,15 @@ export default function Timeline({ steps, onSelect, truncated }) {
         Карта сессии
       </h2>
 
-      <div className="flex h-10 w-full gap-[2px] p-1 bg-zinc-950 rounded-lg border border-zinc-800/80">
+      <div className={`flex h-10 w-full p-1 bg-zinc-950 rounded-lg border border-zinc-800/80 ${dense ? '' : 'gap-[2px]'}`}>
         {steps.map((step) => (
           <button
             key={step.id}
             type="button"
             onClick={() => onSelect(step)}
-            style={{ width }}
+            style={{ flex: '1 1 0', minWidth: 0 }}
             title={`#${step.id} ${stepAction(step)}`}
-            className={`h-full rounded-[3px] transition-all hover:brightness-150 hover:-translate-y-0.5 shadow-sm ${TONE_BAR[stepTone(step)]}`}
+            className={`h-full ${dense ? '' : 'rounded-[3px]'} transition-all hover:brightness-150 hover:-translate-y-0.5 shadow-sm ${TONE_BAR[stepTone(step)]}`}
           />
         ))}
       </div>

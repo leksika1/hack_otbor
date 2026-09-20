@@ -100,5 +100,7 @@ def build_user_prompt(issue: Issue) -> str:
         "Issue JSON:\n"
         f"{payload}\n\n"
         "Explain this issue and produce the AGENTS.md rule. "
-        "Use only the facts present in the JSON above."
+        "Use only the facts present in the JSON above.\n\n"
+        "Отвечай на русском языке: все значения полей JSON - по-русски, "
+        "команды, имена файлов и тексты ошибок оставляй как есть."
     )
