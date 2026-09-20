@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCost, formatDuration, formatNumber } from '../../utils/format';
 import AgentsMdPanel from './AgentsMdPanel';
 import FindingsPanel from './FindingsPanel';
@@ -7,7 +7,7 @@ import StepInspector from './StepInspector';
 import StepTrace from './StepTrace';
 import Timeline from './Timeline';
 
-function ProviderBadge({ provider, isMock }) {
+function ProviderBadge({ provider, isMock, model }) {
   return (
     <span
       className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${
@@ -17,7 +17,7 @@ function ProviderBadge({ provider, isMock }) {
       }`}
       title={isMock ? 'Объяснения сгенерированы офлайн-заглушкой, а не реальной моделью' : 'Объяснения от LLM'}
     >
-      {isMock ? `mock: ${provider}` : provider}
+      {isMock ? `mock: ${provider}` : model || provider}
     </span>
   );
 }
@@ -51,10 +51,15 @@ export default function Dashboard({ report, onReset }) {
         </div>
 
         <div className="flex items-center gap-6 text-sm">
-          <ProviderBadge provider={report.provider} isMock={report.provider_is_mock} />
+          <ProviderBadge provider={report.provider} isMock={report.provider_is_mock} model={report.llm_model} />
           {summary.cost > 0 && (
             <div className="flex flex-col items-end">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-0.5">Стоимость</span>
+              <span
+                className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-0.5"
+                title={summary.cost_estimated ? 'Оценка по ценам API за токены (включая чтение кэша); по подписке фактический счёт иной' : ''}
+              >
+                {summary.cost_estimated ? 'Стоимость ≈' : 'Стоимость'}
+              </span>
               <span className="font-mono text-2xl text-emerald-400 font-semibold">{formatCost(summary.cost)}</span>
             </div>
           )}
@@ -84,7 +89,7 @@ export default function Dashboard({ report, onReset }) {
 
           <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
             <FindingsPanel findings={findings} explanations={explanations} onSelectStep={selectById} />
-            <AgentsMdPanel agentsMd={report.agents_md} />
+            <AgentsMdPanel agentsMd={report.agents_md} artifacts={report.artifacts} />
             <StepInspector step={activeStep} />
           </div>
         </div>

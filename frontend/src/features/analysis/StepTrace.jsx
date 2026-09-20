@@ -1,4 +1,3 @@
-import React from 'react';
 import { ISSUE_LABELS, TONE_BADGE, formatNumber, formatTime, stepAction, stepLabel, stepTone } from '../../utils/format';
 
 export default function StepTrace({ steps, activeStep, onSelect }) {

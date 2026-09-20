@@ -24,6 +24,8 @@ class HealthResponse(BaseModel):
     provider: str = "mock"
     model: str = ""
     fallback_to_mock: bool = False
+    # Key/endpoint failover chain, without secrets.
+    endpoints: list[dict] = Field(default_factory=list)
 
 
 class AgentsMdRequest(BaseModel):

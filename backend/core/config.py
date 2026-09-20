@@ -46,6 +46,16 @@ def _float(name: str, default: float, minimum: float = 0.0) -> float:
         return default
 
 
+def _fallbacks(raw: str) -> tuple[tuple[str | None, str, str], ...]:
+    """``base_url|model|api_key`` entries separated by ``;``. A local server needs any non-empty key."""
+    entries = []
+    for chunk in raw.split(";"):
+        parts = [part.strip() for part in chunk.split("|")]
+        if len(parts) == 3 and parts[1] and parts[2]:
+            entries.append((parts[0] or None, parts[1], parts[2]))
+    return tuple(entries)
+
+
 @dataclass(frozen=True)
 class Settings:
     """Everything the service reads from the environment."""
@@ -66,9 +76,17 @@ class Settings:
     llm_context_radius: int = 2
 
     # API
-    max_upload_bytes: int = 10 * 1024 * 1024
+    max_upload_bytes: int = 50 * 1024 * 1024
     max_steps_in_response: int = 500
     cors_origins: tuple[str, ...] = field(default_factory=lambda: _DEFAULT_CORS)
+
+    # (base_url, model, api_key) endpoints tried after every LLM_API_KEY failed.
+    llm_fallbacks: tuple[tuple[str | None, str, str], ...] = ()
+
+    @property
+    def llm_api_keys(self) -> tuple[str, ...]:
+        """LLM_API_KEY may hold several comma-separated keys for the same endpoint."""
+        return tuple(key.strip() for key in (self.llm_api_key or "").split(",") if key.strip())
 
     @property
     def has_api_key(self) -> bool:
@@ -89,7 +107,8 @@ def get_settings() -> Settings:
         llm_fallback_to_mock=_flag("LLM_FALLBACK_TO_MOCK", False),
         llm_max_issues=_int("LLM_MAX_ISSUES", 5, 0),
         llm_context_radius=_int("LLM_CONTEXT_RADIUS", 2, 0),
-        max_upload_bytes=_int("MAX_UPLOAD_BYTES", 10 * 1024 * 1024, 1024),
+        max_upload_bytes=_int("MAX_UPLOAD_BYTES", 50 * 1024 * 1024, 1024),
         max_steps_in_response=_int("MAX_STEPS_IN_RESPONSE", 500, 1),
+        llm_fallbacks=_fallbacks(_str("LLM_FALLBACKS")),
         cors_origins=tuple(part.strip() for part in origins.split(",") if part.strip()) or _DEFAULT_CORS,
     )

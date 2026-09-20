@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
-export default function AgentsMdPanel({ agentsMd }) {
+export default function AgentsMdPanel({ agentsMd, artifacts }) {
   const [copied, setCopied] = useState(false);
-  const text = agentsMd || '';
+  const [active, setActive] = useState(0);
+  // Older API responses carry only agents_md; treat it as a single file.
+  const files = artifacts?.length
+    ? artifacts
+    : [{ path: 'AGENTS.md', description: 'Правила для агента.', content: agentsMd || '' }];
+  const file = files[Math.min(active, files.length - 1)];
+  const text = file.content || '';
 
   const copy = async () => {
     try {
@@ -19,7 +25,7 @@ export default function AgentsMdPanel({ agentsMd }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'AGENTS.md';
+    link.download = file.path.split('/').pop();
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -38,15 +44,29 @@ export default function AgentsMdPanel({ agentsMd }) {
               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          Сгенерированный AGENTS.md
+          Готовые файлы для следующей сессии
         </h2>
       </div>
 
       <div className="p-6">
-        <p className="text-xs text-zinc-400 mb-5 leading-relaxed">
-          Правила собраны из рекомендаций по найденным проблемам. Положите файл в корень проекта —
-          агент прочитает его в следующей сессии.
-        </p>
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {files.map((item, index) => (
+            <button
+              key={item.path}
+              type="button"
+              onClick={() => setActive(index)}
+              className={`text-[11px] font-mono px-2 py-1 rounded border transition-colors ${
+                index === active
+                  ? 'border-emerald-600 text-emerald-300 bg-emerald-900/30'
+                  : 'border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'
+              }`}
+            >
+              {item.path}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-xs text-zinc-400 mb-4 leading-relaxed">{file.description}</p>
 
         <pre className="text-[11px] font-mono text-zinc-300 bg-zinc-950 p-4 rounded-lg border border-zinc-800/80 whitespace-pre-wrap leading-relaxed shadow-inner mb-5 max-h-64 overflow-y-auto">
           {text || 'Правила не сгенерированы.'}
@@ -67,7 +87,7 @@ export default function AgentsMdPanel({ agentsMd }) {
             disabled={!text}
             className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-medium rounded transition-colors shadow-md"
           >
-            Скачать .md
+            Скачать файл
           </button>
         </div>
       </div>

@@ -11,12 +11,13 @@ _FORMAT = "%(asctime)s %(levelname)-8s %(name)s | %(message)s"
 _configured = False
 
 
-def setup_logging(level: str = "INFO") -> None:
-    """Configure root logging once, writing to stdout (container friendly)."""
+def setup_logging(level: str = "INFO", stream=None) -> None:
+    """Configure root logging once. stdout by default (container friendly); the CLI
+    passes stderr so that ``--json`` output stays parseable."""
     global _configured
     if _configured:
         return
-    handler = logging.StreamHandler(sys.stdout)
+    handler = logging.StreamHandler(stream or sys.stdout)
     handler.setFormatter(logging.Formatter(_FORMAT))
     root = logging.getLogger()
     root.handlers = [handler]

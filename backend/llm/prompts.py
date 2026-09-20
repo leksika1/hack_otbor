@@ -34,25 +34,42 @@ Never invent:
 If the exact cause cannot be established, phrase it as a possible explanation
 rather than a fact (for example: "this may indicate...", "a likely reason is...").
 
-Give a concrete recommendation that could improve the next coding-agent session.
+Work out WHY it happened, not only what happened: what the agent did not know,
+did not check or was not told. Typical causes: the project instructions do not
+name the test/build command; the agent did not read the error output before
+acting; a long-running command was run in the foreground; a permission or tool
+was missing; the task statement was ambiguous.
+
+Then give ONE concrete change for the next session and say where it belongs
+("fix_kind"):
+- "instruction": a rule for CLAUDE.md / AGENTS.md (the default);
+- "skill": a multi-step procedure worth packaging as a reusable skill
+  (for example "how to run and debug the tests in this repo");
+- "tool": a tool, MCP server or CLI the agent should have had;
+- "hook": an automatic check the harness should run (lint after edit, block a command);
+- "settings": permissions, timeouts, background execution, model or effort.
+
+Be specific to this session: name the actual command, file, tool or error text
+from the evidence. A recommendation that would fit any project is a bad one.
 
 The AGENTS.md rule must:
 - be concise (one or two sentences);
-- be actionable;
+- be actionable and specific (name the command or file when the evidence has it);
 - be standalone (understandable without this report);
-- describe behavior the agent should follow in future sessions;
-- be written in the imperative mood, without step numbers or session-specific details.
+- be written in the imperative mood, without step numbers.
 
-Write in English, in plain professional prose. No markdown, no bullet lists,
+Write every field value in Russian, in plain professional prose; keep commands,
+file names, tool names and error text verbatim. No markdown, no bullet lists,
 no headings inside field values.
 
 Return ONLY a JSON object with exactly these string fields:
-  "title"          - short human-readable name of the problem (max ~60 chars);
+  "title"          - short name of the problem (max ~60 chars);
   "explanation"    - what concretely happened, based strictly on the evidence;
-  "impact"         - why this is inefficient (extra tool calls, tokens, time,
-                     lack of progress);
-  "recommendation" - a concrete action for the next session;
-  "agent_rule"     - one standalone rule ready to paste into AGENTS.md.
+  "cause"          - why it happened (hedged if the evidence does not settle it);
+  "impact"         - what it cost: extra tool calls, tokens, money, time;
+  "recommendation" - the concrete change for the next session;
+  "fix_kind"       - one of: instruction, skill, tool, hook, settings;
+  "agent_rule"     - one standalone rule ready to paste into CLAUDE.md / AGENTS.md.
 
 Do not add any other fields, comments or text outside the JSON object.
 """
@@ -66,8 +83,10 @@ RESPONSE_JSON_SCHEMA: dict = {
         "impact": {"type": "string"},
         "recommendation": {"type": "string"},
         "agent_rule": {"type": "string"},
+        "cause": {"type": "string"},
+        "fix_kind": {"type": "string", "enum": ["instruction", "skill", "tool", "hook", "settings"]},
     },
-    "required": ["title", "explanation", "impact", "recommendation", "agent_rule"],
+    "required": ["title", "explanation", "impact", "recommendation", "agent_rule", "cause", "fix_kind"],
     "additionalProperties": False,
 }
 

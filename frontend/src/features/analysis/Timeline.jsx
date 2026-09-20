@@ -1,4 +1,3 @@
-import React from 'react';
 import { TONE_BAR, stepAction, stepTone } from '../../utils/format';
 
 export default function Timeline({ steps, onSelect, truncated }) {

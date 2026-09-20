@@ -50,7 +50,22 @@ def _normalize_rule(rule: str) -> str:
 
 
 def _dedup_key(rule: str) -> str:
-    return re.sub(r"[^a-z0-9 ]+", "", rule.casefold()).strip()
+    # \w keeps Cyrillic: an ASCII-only key would collapse every Russian rule to "".
+    return re.sub(r"[^\w ]+", "", rule.casefold()).strip()
+
+
+def _is_duplicate(key: str, seen: Iterable[str], threshold: float = 0.6) -> bool:
+    """Same rule said twice in different words - compare the sets of meaningful words."""
+    words = {word[:6] for word in key.split() if len(word) > 3}
+    for other in seen:
+        if key == other:
+            return True
+        other_words = {word[:6] for word in other.split() if len(word) > 3}
+        union = words | other_words
+        # Too few words to judge - only an exact match counts for short rules.
+        if min(len(words), len(other_words)) >= 4 and len(words & other_words) / len(union) >= threshold:
+            return True
+    return False
 
 
 def _section_for(explanation: IssueExplanation) -> str:
@@ -90,7 +105,7 @@ def generate_agents_md(
         if not rule:
             continue
         key = _dedup_key(rule)
-        if not key or key in seen:
+        if not key or _is_duplicate(key, seen):
             continue
         seen.add(key)
         section = _section_for(explanation) if group_by_section else FALLBACK_SECTION

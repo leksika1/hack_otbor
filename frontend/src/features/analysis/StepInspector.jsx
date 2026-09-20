@@ -1,4 +1,3 @@
-import React from 'react';
 import { ISSUE_LABELS, formatNumber, formatTime, stepAction, stepLabel } from '../../utils/format';
 
 export default function StepInspector({ step }) {

@@ -66,6 +66,9 @@ class LLMService:
         # Reported by the API so a mock answer is never shown as a real one.
         self.stats: dict[str, int] = {"requests": 0, "failures": 0, "mock_fallbacks": 0}
 
+    # Why the most recent request failed - surfaced in the report's warnings.
+    last_error: str = ""
+
     @property
     def provider_name(self) -> str:
         """Name of the provider actually used, e.g. ``mock`` or ``openai-compatible``."""
@@ -95,6 +98,7 @@ class LLMService:
                     issue.type, attempt + 1, self.retries + 1, exc,
                 )
         self.stats["failures"] += 1
+        self.last_error = _short_error(last_error)
         if self.fallback_to_mock:
             logger.warning("Falling back to MockLLMProvider for issue %s", issue.type)
             self.stats["mock_fallbacks"] += 1
@@ -161,3 +165,10 @@ class LLMService:
                 "steps": list(issue.steps),
             }
         )
+
+
+def _short_error(error: Exception | None) -> str:
+    text = str(error or "")
+    if "429" in text or "rate limit" in text.lower():
+        return "the LLM provider rate limit is exhausted (HTTP 429) - try later, another model or a paid key"
+    return text[:200]

@@ -1,5 +1,12 @@
-import React from 'react';
 import { ISSUE_LABELS, SEVERITY_BADGE } from '../../utils/format';
+
+const FIX_KIND_LABELS = {
+  instruction: 'правило в CLAUDE.md',
+  skill: 'скилл',
+  tool: 'инструмент / MCP',
+  hook: 'хук',
+  settings: 'настройки',
+};
 
 function StepLinks({ steps, onSelectStep }) {
   if (!steps?.length) return null;
@@ -53,12 +60,23 @@ export default function FindingsPanel({ findings, explanations, onSelectStep }) 
             <p className="text-sm text-zinc-300 leading-relaxed mb-3">{item.explanation}</p>
 
             <div className="text-xs text-zinc-400 leading-relaxed space-y-2">
+              {item.cause && (
+                <p>
+                  <span className="text-amber-500/80 uppercase font-bold tracking-wider mr-2">Почему так вышло</span>
+                  {item.cause}
+                </p>
+              )}
               <p>
-                <span className="text-zinc-500 uppercase font-bold tracking-wider mr-2">Почему это плохо</span>
+                <span className="text-zinc-500 uppercase font-bold tracking-wider mr-2">Чего это стоило</span>
                 {item.impact}
               </p>
               <p>
                 <span className="text-emerald-500/80 uppercase font-bold tracking-wider mr-2">Что сделать</span>
+                {item.fix_kind && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 mr-2 rounded border border-emerald-800/60 text-emerald-400 bg-emerald-950/40">
+                    {FIX_KIND_LABELS[item.fix_kind] || item.fix_kind}
+                  </span>
+                )}
                 {item.recommendation}
               </p>
               <p className="font-mono text-[11px] text-zinc-400 bg-zinc-900 border border-zinc-800 rounded p-3">

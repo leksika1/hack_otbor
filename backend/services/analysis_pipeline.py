@@ -26,6 +26,7 @@ from backend.analysis import (
 )
 from backend.core.config import Settings, get_settings
 from backend.llm import IssueExplanation, LLMService, generate_agents_md
+from backend.llm.artifacts import build_artifacts
 from backend.parser import ParseResult, SessionParser, Step
 
 from .report import FindingOut, SessionReport, StepOut, SummaryOut
@@ -56,8 +57,10 @@ async def analyze_session(
     max_issues = settings.llm_max_issues if max_issues is None else max_issues
     context_radius = settings.llm_context_radius if context_radius is None else context_radius
 
-    parsed = _parse(source, log_format)
-    analysis = analyze_steps(parsed.steps, AnalysisConfig())
+    # Parsing and the detectors are CPU-bound (seconds on a multi-megabyte log);
+    # run them in a worker thread so the API keeps answering other requests.
+    parsed = await asyncio.to_thread(_parse, source, log_format)
+    analysis = await asyncio.to_thread(analyze_steps, parsed.steps, AnalysisConfig())
     warnings = [str(warning) for warning in parsed.warnings[:50]]
     if not parsed.steps:
         warnings.append("No readable JSON lines were found in the uploaded file.")
@@ -76,10 +79,14 @@ async def analyze_session(
         except Exception as exc:  # noqa: BLE001 - the report is still useful without the LLM
             logger.exception("LLM stage failed")
             warnings.append(f"LLM stage failed: {type(exc).__name__}: {exc}")
+        failed = int(service.stats.get("failures", 0) or 0)
+        reason = f" Reason: {service.last_error}." if getattr(service, "last_error", "") else ""
         if not explanations:
             warnings.append(
-                "No explanations were produced; the deterministic findings are unaffected."
+                f"No explanations were produced; the deterministic findings are unaffected.{reason}"
             )
+        elif failed:
+            warnings.append(f"{failed} issue(s) were not explained.{reason}")
     if service.stats.get("mock_fallbacks"):
         warnings.append(
             f"{service.stats['mock_fallbacks']} explanation(s) came from the mock provider "
@@ -92,8 +99,10 @@ async def analyze_session(
         explanations=explanations,
         steps=_steps_out(parsed.steps, analysis.findings, settings.max_steps_in_response),
         steps_truncated=len(parsed.steps) > settings.max_steps_in_response,
-        agents_md=generate_agents_md(explanations) if include_agents_md else "",
+        agents_md=_agents_md(explanations, selected, len(analysis.findings)) if include_agents_md else "",
+        artifacts=build_artifacts(explanations, file_name) if include_agents_md else [],
         provider=service.provider_name,
+        llm_model="" if service.used_mock else str(getattr(service.provider, "model", "")),
         provider_is_mock=service.used_mock,
         warnings=warnings,
     )
@@ -126,6 +135,21 @@ def _parse(source: Any, log_format: str) -> ParseResult:
     raise ValueError(f"unsupported log source: {type(source).__name__}")
 
 
+def _agents_md(explanations: list[IssueExplanation], selected: list, findings: int = 0) -> str:
+    if findings and not selected:
+        return (
+            "# Agent Rules\n\n_Rules were not generated: explanations are switched off "
+            "(explain=false or LLM_MAX_ISSUES=0). The findings are listed in the report._\n"
+        )
+    if selected and not explanations:
+        # Issues were found but nothing explained them - do not claim a clean session.
+        return (
+            "# Agent Rules\n\n_Rules could not be generated: the LLM stage produced no "
+            "explanations. See `warnings`; the deterministic findings are unaffected._\n"
+        )
+    return generate_agents_md(explanations)
+
+
 def _summary(parsed: ParseResult, analysis, explanations, file_name: str) -> SummaryOut:
     metrics = analysis.metrics
     return SummaryOut(
@@ -134,6 +158,7 @@ def _summary(parsed: ParseResult, analysis, explanations, file_name: str) -> Sum
         steps=metrics.total_steps,
         tokens=metrics.total_tokens,
         cost=metrics.total_cost,
+        cost_estimated=parsed.log_format == "claude" and metrics.total_cost > 0,
         duration_seconds=metrics.duration_seconds,
         tool_calls=metrics.tool_calls,
         tool_errors=metrics.tool_errors,

@@ -24,6 +24,7 @@ __all__ = [
     "Issue",
     "LLMOutput",
     "IssueExplanation",
+    "FIX_KINDS",
     "severity_rank",
 ]
 
@@ -35,6 +36,12 @@ SEVERITY_ORDER: dict[str, int] = {
     "low": 3,
     "info": 4,
 }
+
+# instruction -> a rule in CLAUDE.md / AGENTS.md; skill -> a reusable procedure;
+# tool -> an MCP server or CLI to connect; hook -> an automatic check in the
+# harness; settings -> permissions, timeouts, model or effort.
+FIX_KINDS: tuple[str, ...] = ("instruction", "skill", "tool", "hook", "settings")
+
 
 def severity_rank(severity: str | None) -> int:
     """Sort key for a severity string. Unknown values sort after known ones."""
@@ -191,6 +198,16 @@ class LLMOutput(BaseModel):
     impact: str
     recommendation: str
     agent_rule: str
+    # Why it happened (hedged when the evidence does not settle it).
+    cause: str = ""
+    # Where the fix belongs - decides which ready-to-use file the rule lands in.
+    fix_kind: str = "instruction"
+
+    @field_validator("fix_kind", mode="before")
+    @classmethod
+    def _known_fix_kind(cls, value: Any) -> str:
+        kind = str(value or "").strip().lower()
+        return kind if kind in FIX_KINDS else "instruction"
 
     @field_validator("*", mode="before")
     @classmethod
@@ -221,6 +238,8 @@ class IssueExplanation(BaseModel):
     impact: str
     recommendation: str
     agent_rule: str
+    cause: str = ""
+    fix_kind: str = "instruction"
 
     @classmethod
     def from_issue(cls, issue: Issue, output: LLMOutput) -> "IssueExplanation":

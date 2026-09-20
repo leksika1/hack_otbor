@@ -44,9 +44,24 @@ def analyze_steps(steps: Sequence[Step], config: AnalysisConfig | None = None) -
         except Exception:  # noqa: BLE001 - one detector must not break the report
             logger.exception("detector %s failed", name)
 
+    findings = _drop_repeats_explained_by_retries(findings, steps)
     result = AnalysisResult(metrics=_metrics(steps, config), findings=rank_findings(findings))
     logger.info("analysis produced %s findings from %s steps", len(result.findings), len(steps))
     return result
+
+
+def _drop_repeats_explained_by_retries(findings: list[Finding], steps: Sequence[Step]) -> list[Finding]:
+    """Re-running a failed command is reported once, as a retry.
+
+    The repeat detector sees the same two calls and would otherwise produce a
+    second finding - and a second, near-identical rule - for one event.
+    """
+    call_of_result = {step.id: call.id for step in steps if step.is_tool_result and step.call_id
+                      for call in steps if call.is_tool_call and call.call_id == step.call_id}
+    retried = {tuple(call_of_result.get(step_id, step_id) for step_id in finding.steps)
+               for finding in findings if finding.type == "retry"}
+    return [finding for finding in findings
+            if not (finding.type == "repeated_tool_call" and tuple(finding.steps) in retried)]
 
 
 def _metrics(steps: Sequence[Step], config: AnalysisConfig) -> SessionMetrics:

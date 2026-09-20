@@ -11,4 +11,4 @@
 {"type": "user", "timestamp": "2026-02-02T09:01:01Z", "message": {"content": [{"type": "tool_result", "tool_use_id": "d", "content": ""}]}}
 {"type": "user", "uuid": "u-meta", "timestamp": "2026-02-02T09:01:02Z", "isMeta": true, "message": {"role": "user", "content": "<system-reminder>ignore me</system-reminder>"}}
 {"type": "user", "uuid": "u2", "timestamp": "2026-02-02T09:06:40Z", "message": {"role": "user", "content": "нет, тест падает из-за конфига, а не из-за auth.js"}}
-{"type": "assistant", "timestamp": "2026-02-02T09:06:45Z", "message": {"id": "m5", "content": [{"type": "text", "text": "Понял, смотрю конфиг."}], "usage": {"input_tokens": 150, "output_tokens": 40}}}
+{"type": "assistant", "timestamp": "2026-02-02T09:12:45Z", "message": {"id": "m5", "content": [{"type": "text", "text": "Понял, смотрю конфиг."}], "usage": {"input_tokens": 150, "output_tokens": 40}}}

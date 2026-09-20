@@ -54,6 +54,7 @@ def detect(steps: Sequence[Step], config: AnalysisConfig) -> list[Finding]:
                 f"({ratio:.1f}x the session average)."
             ),
             evidence={
+                **({"cost_usd": bucket["cost"]} if bucket["cost"] else {}),
                 "token_count": tokens,
                 "average_bucket_tokens": round(average, 1),
                 "ratio": round(ratio, 2),

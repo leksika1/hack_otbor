@@ -190,7 +190,8 @@ broken lines inside a valid log are not an error — they are counted in
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `LLM_API_KEY` | *(empty)* | Key for an OpenAI-compatible API. Empty = mock provider. |
+| `LLM_API_KEY` | *(empty)* | Key for an OpenAI-compatible API; several comma-separated keys rotate (a key answering 429/401 is benched for 10 minutes). Empty = mock provider. |
+| `LLM_FALLBACKS` | *(empty)* | Endpoints tried after every key failed: `base_url\|model\|key` separated by `;` (e.g. OpenAI, then a local server). |
 | `LLM_BASE_URL` | *(empty)* | Custom endpoint (OpenRouter, vLLM, a local proxy). |
 | `LLM_MODEL` | `gpt-4o-mini` | Model name passed to the provider. |
 | `LLM_TIMEOUT_SECONDS` | `60` | Per-request timeout. |
@@ -198,13 +199,35 @@ broken lines inside a valid log are not an error — they are counted in
 | `LLM_MAX_ISSUES` | `5` | How many issues are explained per session. |
 | `LLM_CONTEXT_RADIUS` | `2` | Steps included around each flagged step. |
 | `LLM_CONCURRENCY` | `4` | Parallel LLM requests. |
-| `MAX_UPLOAD_BYTES` | `10485760` | Upload limit for `POST /api/analyze`. |
+| `MAX_UPLOAD_BYTES` | `52428800` | Upload limit for `POST /api/analyze`. |
 | `MAX_STEPS_IN_RESPONSE` | `500` | Steps returned to the UI. |
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Comma-separated allowed origins. |
 | `LOG_LEVEL` | `INFO` | Python logging level. |
 | `VITE_API_URL` (frontend) | `/api` | API base path baked into the bundle. |
 
 `.env` is git-ignored; `.env.example` is not. No secrets live in the repository.
+
+## Recommendations as files
+
+Every explanation carries the cause (`cause`) and where the fix belongs
+(`fix_kind`: `instruction`, `skill`, `tool`, `hook`, `settings`). From them the
+report builds `artifacts` - files ready to drop into the project:
+
+* `AGENTS.md` - de-duplicated rules grouped by topic;
+* `CLAUDE.md.append.md` - a block for `CLAUDE.md`, each rule annotated with the steps it came from;
+* `.claude/skills/<name>/SKILL.md` - a draft for every `skill` recommendation;
+* `NEXT_SESSION.md` - a checklist grouped by kind of fix.
+
+```bash
+python -m backend.cli session.jsonl --out-dir ./session-review
+```
+
+## Cost
+
+Claude Code logs carry token usage but no prices, so cost is estimated from
+`message.model` at API list prices (cache writes 1.25x input, cache reads at
+their own rate) and flagged `summary.cost_estimated`. Token hotspots show the
+money spent in that stretch (`evidence.cost_usd`).
 
 ## LLM providers: real vs mock
 
